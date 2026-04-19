@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chrissy's Stremio Setup Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f9f8f6;
+    --card: #ffffff;
+    --border: #e8e4de;
+    --text: #1a1a1a;
+    --muted: #6b6b6b;
+    --accent: #7c3aed;
+    --accent-light: #ede9fe;
+    --accent-dark: #5b21b6;
+    --success: #059669;
+    --success-light: #d1fae5;
+    --step-inactive: #e8e4de;
+    --radius: 12px;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px 16px 60px;
+  }
+
+  .container { max-width: 640px; margin: 0 auto; }
+
+  .header {
+    text-align: center;
+    padding: 40px 0 32px;
+  }
+  .header .emoji { font-size: 48px; display: block; margin-bottom: 16px; }
+  .header h1 { font-size: 28px; font-weight: 700; color: var(--text); line-height: 1.2; }
+  .header p { margin-top: 10px; color: var(--muted); font-size: 15px; line-height: 1.6; }
+
+  /* Progress */
+  .progress-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 16px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+  }
+  .progress-step {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+    cursor: pointer;
+  }
+  .progress-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 15px;
+    left: 50%;
+    width: 100%;
+    height: 2px;
+    background: var(--step-inactive);
+    z-index: 0;
+    transition: background 0.3s;
+  }
+  .progress-step.done:not(:last-child)::after { background: var(--accent); }
+  .progress-dot {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: var(--step-inactive);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: var(--muted);
+    position: relative; z-index: 1;
+    transition: all 0.3s;
+    border: 2px solid transparent;
+  }
+  .progress-step.active .progress-dot {
+    background: var(--accent); color: white;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-light);
+  }
+  .progress-step.done .progress-dot { background: var(--accent); color: white; }
+  .progress-label {
+    font-size: 10px; color: var(--muted); font-weight: 500;
+    text-align: center; white-space: nowrap;
+  }
+  .progress-step.active .progress-label { color: var(--accent); font-weight: 600; }
+  .progress-step.done .progress-label { color: var(--accent); }
+
+  /* Stages */
+  .stage { display: none; animation: fadeIn 0.3s ease; }
+  .stage.active { display: block; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .stage-header { margin-bottom: 20px; }
+  .stage-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--accent-light);
+    color: var(--accent-dark);
+    font-size: 11px; font-weight: 600;
+    padding: 4px 12px; border-radius: 100px;
+    margin-bottom: 10px;
+    letter-spacing: 0.03em; text-transform: uppercase;
+  }
+  .stage-badge.rd { background: #fef3c7; color: #92400e; }
+  .stage-title { font-size: 22px; font-weight: 700; color: var(--text); }
+  .stage-sub { margin-top: 6px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+  /* Steps */
+  .steps { display: flex; flex-direction: column; gap: 12px; }
+  .step {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    display: flex; gap: 14px; align-items: flex-start;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    user-select: none;
+  }
+  .step:hover { border-color: var(--accent); box-shadow: 0 2px 12px rgba(124,58,237,0.08); }
+  .step.checked { border-color: var(--success); background: #fafffe; }
+
+  .step-num {
+    width: 28px; height: 28px; min-width: 28px;
+    border-radius: 50%;
+    background: var(--accent-light); color: var(--accent-dark);
+    font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+  .step.checked .step-num { background: var(--success-light); color: var(--success); }
+  .step-num-check { display: none; }
+  .step.checked .step-num-num { display: none; }
+  .step.checked .step-num-check { display: block; }
+
+  .step-body { flex: 1; }
+  .step-title { font-size: 15px; font-weight: 600; color: var(--text); line-height: 1.4; }
+  .step.checked .step-title { color: var(--muted); text-decoration: line-through; }
+  .step-detail {
+    margin-top: 6px; font-size: 13px; color: var(--muted);
+    line-height: 1.6; display: none;
+  }
+  .step.open .step-detail { display: block; }
+
+  .step-link {
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-top: 10px;
+    background: var(--accent); color: white;
+    text-decoration: none; font-size: 13px; font-weight: 600;
+    padding: 7px 14px; border-radius: 8px;
+    transition: background 0.2s;
+  }
+  .step-link:hover { background: var(--accent-dark); }
+  .step-link.amber { background: #d97706; }
+  .step-link.amber:hover { background: #b45309; }
+
+  .tip-box {
+    background: #fffbeb; border: 1px solid #fde68a;
+    border-radius: 10px; padding: 12px 16px;
+    font-size: 13px; color: #92400e; line-height: 1.6; margin-top: 10px;
+  }
+  .tip-box strong { color: #78350f; }
+
+  .info-box {
+    background: #eff6ff; border: 1px solid #bfdbfe;
+    border-radius: 10px; padding: 12px 16px;
+    font-size: 13px; color: #1e40af; line-height: 1.6; margin-top: 10px;
+  }
+  .info-box strong { color: #1e3a8a; }
+
+  .safe-box {
+    background: #f0fdf4; border: 1px solid #bbf7d0;
+    border-radius: 10px; padding: 12px 16px;
+    font-size: 13px; color: #166534; line-height: 1.6; margin-top: 10px;
+  }
+  .safe-box strong { color: #14532d; }
+
+  /* API key display */
+  .api-instruction {
+    background: #f5f3ff; border: 1px solid #ddd6fe;
+    border-radius: 10px; padding: 14px 16px; margin-top: 10px;
+    font-size: 13px; line-height: 1.7; color: var(--text);
+  }
+  .api-instruction ol { padding-left: 18px; }
+  .api-instruction li { margin-bottom: 6px; }
+  .code { font-family: monospace; background: #e5e7eb; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+
+  /* Nav */
+  .nav {
+    display: flex; justify-content: space-between;
+    align-items: center; margin-top: 28px; gap: 12px;
+  }
+  .btn {
+    padding: 12px 24px; border-radius: 10px;
+    font-size: 15px; font-weight: 600; border: none;
+    cursor: pointer; transition: all 0.2s;
+    font-family: 'Inter', sans-serif;
+  }
+  .btn-primary { background: var(--accent); color: white; flex: 1; }
+  .btn-primary:hover { background: var(--accent-dark); }
+  .btn-secondary {
+    background: var(--card); color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { color: var(--text); border-color: #bbb; }
+
+  /* Done */
+  .done-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 40px 32px; text-align: center;
+  }
+  .done-emoji { font-size: 56px; display: block; margin-bottom: 20px; }
+  .done-card h2 { font-size: 24px; font-weight: 700; margin-bottom: 10px; }
+  .done-card p { color: var(--muted); font-size: 15px; line-height: 1.7; }
+  .tips-section { margin-top: 24px; text-align: left; }
+  .tips-section h3 {
+    font-size: 13px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;
+  }
+  .tip-item {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 16px;
+    font-size: 14px; color: var(--text); line-height: 1.6; margin-bottom: 8px;
+  }
+  .tip-item strong { color: var(--accent-dark); }
+  .restart-btn {
+    margin-top: 24px; background: none;
+    border: 1px solid var(--border); color: var(--muted);
+    font-size: 13px; padding: 8px 16px; border-radius: 8px;
+    cursor: pointer; font-family: 'Inter', sans-serif; transition: all 0.2s;
+  }
+  .restart-btn:hover { color: var(--text); border-color: #aaa; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <span class="emoji">📺</span>
+    <h1>Chrissy's Stremio Setup Guide</h1>
+    <p>Get Stremio working on your Samsung TV in 4 stages.<br>Tick off each step as you go.</p>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-wrap">
+    <div class="progress-step active" id="prog-0" onclick="goToStage(0)">
+      <div class="progress-dot">1</div>
+      <div class="progress-label">Account</div>
+    </div>
+    <div class="progress-step" id="prog-1" onclick="goToStage(1)">
+      <div class="progress-dot">2</div>
+      <div class="progress-label">Real-Debrid</div>
+    </div>
+    <div class="progress-step" id="prog-2" onclick="goToStage(2)">
+      <div class="progress-dot">3</div>
+      <div class="progress-label">Addon</div>
+    </div>
+    <div class="progress-step" id="prog-3" onclick="goToStage(3)">
+      <div class="progress-dot">4</div>
+      <div class="progress-label">Samsung TV</div>
+    </div>
+    <div class="progress-step" id="prog-4" onclick="goToStage(4)">
+      <div class="progress-dot">✓</div>
+      <div class="progress-label">Done!</div>
+    </div>
+  </div>
+
+  <!-- Stage 1: Stremio Account -->
+  <div class="stage active" id="stage-0">
+    <div class="stage-header">
+      <div class="stage-badge">Stage 1 of 4 · On your phone or laptop</div>
+      <div class="stage-title">Create Your Stremio Account</div>
+      <div class="stage-sub">Takes about 2 minutes. Do this on your phone or laptop — not the TV. Everything syncs to the TV automatically once you log in.</div>
+    </div>
+    <div class="steps">
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">1</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Go to the Stremio website</div>
+          <div class="step-detail">
+            Open your phone or laptop browser and head to stremio.com.<br><br>
+            <a class="step-link" href="https://www.stremio.com" target="_blank">→ Open stremio.com</a>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">2</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Click Sign Up and create an account</div>
+          <div class="step-detail">
+            Enter your email address and choose a password. You'll get a confirmation email — click the link in it to verify your account.<br><br>
+            <div class="tip-box"><strong>✍️ Write it down!</strong> You'll need your Stremio email and password when you log into the TV later.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">3</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Download Stremio on your phone or laptop</div>
+          <div class="step-detail">
+            Download the app for your device, open it, and log in with the account you just made.<br><br>
+            <a class="step-link" href="https://www.stremio.com/apps" target="_blank">→ Download Stremio</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="nav">
+      <button class="btn btn-primary" onclick="nextStage()">Next: Set up Real-Debrid →</button>
+    </div>
+  </div>
+
+  <!-- Stage 2: Real-Debrid -->
+  <div class="stage" id="stage-1">
+    <div class="stage-header">
+      <div class="stage-badge rd">Stage 2 of 4 · On your phone or laptop</div>
+      <div class="stage-title">Set Up Real-Debrid</div>
+      <div class="stage-sub">Real-Debrid is a small paid service (~€3/month) that makes everything faster, smoother, and safer. Without it, streams can be slow or buffery. It's worth it.</div>
+    </div>
+
+    <div class="info-box" style="margin-bottom: 16px;">
+      <strong>🛡️ Why Real-Debrid?</strong><br>
+      Instead of downloading from other people's computers (which can be slow or risky), Real-Debrid has already saved popular content on their own fast servers. You stream directly from them — much quicker, much safer, and no dodgy connections.
+    </div>
+
+    <div class="steps">
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">1</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Go to Real-Debrid and create an account</div>
+          <div class="step-detail">
+            Click the link below, then click <strong>Sign Up</strong>. Enter a username, your email, and a password. Verify your email when they send you a confirmation.<br><br>
+            <a class="step-link amber" href="https://real-debrid.com" target="_blank">→ Open Real-Debrid</a>
+            <div class="tip-box" style="margin-top: 10px;"><strong>✍️ Write this down too!</strong> Keep your Real-Debrid login separate from your Stremio one.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">2</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Choose a plan and pay</div>
+          <div class="step-detail">
+            Once logged in, go to the <strong>Premium Offers</strong> page. Here's what the plans look like in AUD:<br><br>
+            <div class="api-instruction">
+              <ol>
+                <li><strong>15 days — ~$4.93 AUD</strong> · Good if you just want to try it</li>
+                <li><strong>30 days — ~$6.58 AUD</strong></li>
+                <li><strong>90 days — ~$14.79 AUD</strong> ← <strong>Start here</strong></li>
+                <li><strong>180 days — ~$26.30 AUD</strong> ← <strong>Switch to this after</strong></li>
+              </ol>
+            </div>
+            <div class="info-box" style="margin-top: 10px;">
+              <strong>💡 Recommendation:</strong> Start with the 90-day plan to try it out. Once you're happy with it, grab the 180-day plan next time — best value at about $4.40/month AUD.<br><br>
+              It's prepaid, not a subscription — so every 90 or 180 days you just log back in and pay again. No automatic charges.
+            </div>
+            <a class="step-link amber" href="https://real-debrid.com/premium" target="_blank" style="margin-top: 12px;">→ View Premium Plans</a>
+            <div class="safe-box" style="margin-top: 10px;">
+              <strong>✅ This is the only cost in the whole setup.</strong> Stremio and the addon are completely free.
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">3</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Get your Real-Debrid API Key</div>
+          <div class="step-detail">
+            Your API key is like a password that connects Real-Debrid to Stremio. Here's how to find it:<br><br>
+            <div class="api-instruction">
+              <ol>
+                <li>While logged into Real-Debrid, click this link:</li>
+              </ol>
+              <a class="step-link amber" href="https://real-debrid.com/apitoken" target="_blank" style="margin-top: 8px;">→ Get my API Key</a>
+              <ol start="2" style="margin-top: 10px;">
+                <li>You'll see a long string of letters and numbers — that's your key</li>
+                <li>Copy it (press and hold on mobile, or Ctrl+C / Cmd+C on laptop)</li>
+                <li>Paste it somewhere handy — Notes app on your phone works great</li>
+              </ol>
+            </div>
+            <div class="tip-box"><strong>🔑 Keep this key safe.</strong> Don't share it with anyone — it's linked to your paid account.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="nav">
+      <button class="btn btn-secondary" onclick="prevStage()">← Back</button>
+      <button class="btn btn-primary" onclick="nextStage()">Next: Install the Addon →</button>
+    </div>
+  </div>
+
+  <!-- Stage 3: Torrentio + RD -->
+  <div class="stage" id="stage-2">
+    <div class="stage-header">
+      <div class="stage-badge">Stage 3 of 4 · On your phone or laptop</div>
+      <div class="stage-title">Install & Connect the Addon</div>
+      <div class="stage-sub">This is where you connect Real-Debrid to Stremio using the API key you just copied. You only do this once — it'll sync to your TV automatically.</div>
+    </div>
+    <div class="steps">
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">1</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Open the Torrentio setup page</div>
+          <div class="step-detail">
+            Torrentio is the addon that finds movies and shows for you. Open it on the same device where Stremio is installed.<br><br>
+            <a class="step-link" href="https://torrentio.strem.fun" target="_blank">→ Open Torrentio</a>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">2</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Select Real-Debrid as your provider</div>
+          <div class="step-detail">
+            On the Torrentio page, look for a dropdown that says <strong>Debrid provider</strong> (or similar). Click it and select <strong>Real-Debrid</strong> from the list.<br><br>
+            <div class="info-box">A new field will appear below it asking for your API key. That's next.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">3</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Paste your Real-Debrid API key</div>
+          <div class="step-detail">
+            In the API key field that appeared, paste the key you copied in Stage 2.<br><br>
+            (It's the long string of letters and numbers you saved in your Notes app.)<br><br>
+            <div class="safe-box"><strong>✅ Once this is entered</strong>, all your streams will come through Real-Debrid — fast and safe.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">4</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Click Install and confirm in Stremio</div>
+          <div class="step-detail">
+            Scroll down and click the big <strong>Install</strong> button. A popup will appear — click <strong>Open Stremio</strong>, then click <strong>Install</strong> to confirm.<br><br>
+            Once Stremio says the addon is installed, you're done with this stage! 🎉
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="nav">
+      <button class="btn btn-secondary" onclick="prevStage()">← Back</button>
+      <button class="btn btn-primary" onclick="nextStage()">Next: Set up the TV →</button>
+    </div>
+  </div>
+
+  <!-- Stage 4: Samsung TV -->
+  <div class="stage" id="stage-3">
+    <div class="stage-header">
+      <div class="stage-badge">Stage 4 of 4 · On your Samsung TV</div>
+      <div class="stage-title">Install Stremio on Your Samsung TV</div>
+      <div class="stage-sub">Grab your Samsung remote — this is the last step. Works on Samsung TVs from 2019 onwards.</div>
+    </div>
+    <div class="steps">
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">1</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Press the Home button on your remote</div>
+          <div class="step-detail">It's the button that looks like a little house. This takes you to the Samsung home screen.</div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">2</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Go to Apps</div>
+          <div class="step-detail">Use the remote to navigate to <strong>Apps</strong> — it looks like a grid of squares, usually at the bottom of the home screen.</div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">3</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Search for Stremio and install it</div>
+          <div class="step-detail">Click the magnifying glass (search) icon and type <strong>Stremio</strong>. Select it from the results and click <strong>Install</strong>. Takes about a minute to download.</div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">4</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Open Stremio and log in</div>
+          <div class="step-detail">
+            Open the app, select <strong>Log In</strong>, and enter the Stremio email and password you wrote down in Stage 1.<br><br>
+            <div class="tip-box"><strong>📝 Heads up:</strong> Use your Stremio login here — not your Samsung account or Real-Debrid one.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">5</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Search for something and watch!</div>
+          <div class="step-detail">
+            Use the search bar to find a movie or TV show. Pick a stream near the top of the list — those are your Real-Debrid streams, which are the fastest. Click play and enjoy! 🎉<br><br>
+            <div class="safe-box"><strong>RD streams are labelled</strong> — look for ones that say <strong class="code">RD</strong> next to them. These are the good ones.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="nav">
+      <button class="btn btn-secondary" onclick="prevStage()">← Back</button>
+      <button class="btn btn-primary" onclick="nextStage()">All done! →</button>
+    </div>
+  </div>
+
+  <!-- Done -->
+  <div class="stage" id="stage-4">
+    <div class="done-card">
+      <span class="done-emoji">🎉</span>
+      <h2>You're all set, Chrissy!</h2>
+      <p>Stremio is ready on your Samsung TV with Real-Debrid powering the streams. Fast, smooth, and safe — enjoy!</p>
+
+      <div class="tips-section">
+        <h3>Quick Tips</h3>
+        <div class="tip-item"><strong>Look for RD streams</strong> — in the stream list, pick ones marked <strong>RD</strong>. These come from Real-Debrid and are the fastest</div>
+        <div class="tip-item"><strong>Can't find a stream?</strong> Try searching with the year — e.g. <em>Succession 2018</em></div>
+        <div class="tip-item"><strong>Buffering?</strong> Pick a different RD stream from the list — try the next one down</div>
+        <div class="tip-item"><strong>Very new episode missing?</strong> Give it a day or two for brand new episodes to appear</div>
+        <div class="tip-item"><strong>Something not working?</strong> Quick TV restart usually fixes it — or message Steve 😄</div>
+      </div>
+
+      <button class="restart-btn" onclick="restart()">↩ Start from the beginning</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  var current = 0;
+  var total = 5;
+
+  function goToStage(n) {
+    document.getElementById('stage-' + current).classList.remove('active');
+    document.getElementById('prog-' + current).classList.remove('active');
+    current = n;
+    document.getElementById('stage-' + current).classList.add('active');
+    updateProgress();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function nextStage() { if (current < total - 1) goToStage(current + 1); }
+  function prevStage() { if (current > 0) goToStage(current - 1); }
+
+  function updateProgress() {
+    for (var i = 0; i < total; i++) {
+      var el = document.getElementById('prog-' + i);
+      el.classList.remove('active', 'done');
+      if (i < current) el.classList.add('done');
+      if (i === current) el.classList.add('active');
+    }
+  }
+
+  function toggleStep(el) {
+    var isOpen = el.classList.contains('open');
+    el.closest('.steps').querySelectorAll('.step').forEach(function(s) {
+      s.classList.remove('open');
+    });
+    if (!isOpen) {
+      el.classList.add('open');
+    } else {
+      el.classList.toggle('checked');
+    }
+  }
+
+  function restart() {
+    document.querySelectorAll('.step').forEach(function(s) {
+      s.classList.remove('checked', 'open');
+    });
+    goToStage(0);
+  }
+</script>
+</body>
+</html>
