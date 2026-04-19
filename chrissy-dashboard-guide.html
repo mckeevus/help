@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chrissy's Dashboard Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f9f8f6; --card: #ffffff; --border: #e8e4de;
+    --text: #1a1a1a; --muted: #6b6b6b;
+    --accent: #0f766e; --accent-light: #ccfbf1; --accent-dark: #0d5c55;
+    --success: #059669; --success-light: #d1fae5;
+    --step-inactive: #e8e4de; --radius: 12px;
+  }
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 24px 16px 60px; }
+  .container { max-width: 680px; margin: 0 auto; }
+
+  .header { text-align: center; padding: 40px 0 32px; }
+  .header .emoji { font-size: 48px; display: block; margin-bottom: 16px; }
+  .header h1 { font-size: 28px; font-weight: 700; line-height: 1.2; }
+  .header p { margin-top: 10px; color: var(--muted); font-size: 15px; line-height: 1.6; }
+
+  /* Inspiration box */
+  .inspiration {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-bottom: 28px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  .inspiration-icon { font-size: 32px; flex-shrink: 0; }
+  .inspiration h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .inspiration p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .inspiration a { color: var(--accent); font-weight: 600; text-decoration: none; }
+  .inspiration a:hover { text-decoration: underline; }
+  .login-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--accent-light); color: var(--accent-dark);
+    font-size: 12px; font-weight: 600; padding: 3px 10px;
+    border-radius: 100px; margin-top: 8px;
+  }
+
+  /* Progress */
+  .progress-wrap { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 12px; margin-bottom: 28px; display: flex; align-items: center; }
+  .progress-step { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; cursor: pointer; }
+  .progress-step:not(:last-child)::after { content: ''; position: absolute; top: 15px; left: 50%; width: 100%; height: 2px; background: var(--step-inactive); z-index: 0; transition: background 0.3s; }
+  .progress-step.done:not(:last-child)::after { background: var(--accent); }
+  .progress-dot { width: 30px; height: 30px; border-radius: 50%; background: var(--step-inactive); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--muted); position: relative; z-index: 1; transition: all 0.3s; border: 2px solid transparent; }
+  .progress-step.active .progress-dot { background: var(--accent); color: white; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-light); }
+  .progress-step.done .progress-dot { background: var(--accent); color: white; }
+  .progress-label { font-size: 9px; color: var(--muted); font-weight: 500; text-align: center; white-space: nowrap; }
+  .progress-step.active .progress-label { color: var(--accent); font-weight: 600; }
+  .progress-step.done .progress-label { color: var(--accent); }
+
+  /* Stages */
+  .stage { display: none; animation: fadeIn 0.3s ease; }
+  .stage.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .stage-header { margin-bottom: 20px; }
+  .stage-badge { display: inline-flex; align-items: center; background: var(--accent-light); color: var(--accent-dark); font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 100px; margin-bottom: 10px; letter-spacing: 0.03em; text-transform: uppercase; }
+  .stage-title { font-size: 22px; font-weight: 700; }
+  .stage-sub { margin-top: 6px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+  /* Steps */
+  .steps { display: flex; flex-direction: column; gap: 12px; }
+  .step { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; display: flex; gap: 14px; align-items: flex-start; cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s; user-select: none; }
+  .step:hover { border-color: var(--accent); box-shadow: 0 2px 12px rgba(15,118,110,0.08); }
+  .step.checked { border-color: var(--success); background: #fafffe; }
+  .step-num { width: 28px; height: 28px; min-width: 28px; border-radius: 50%; background: var(--accent-light); color: var(--accent-dark); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+  .step.checked .step-num { background: var(--success-light); color: var(--success); }
+  .step-num-check { display: none; }
+  .step.checked .step-num-num { display: none; }
+  .step.checked .step-num-check { display: block; }
+  .step-body { flex: 1; }
+  .step-title { font-size: 15px; font-weight: 600; line-height: 1.4; }
+  .step.checked .step-title { color: var(--muted); text-decoration: line-through; }
+  .step-detail { margin-top: 6px; font-size: 13px; color: var(--muted); line-height: 1.6; display: none; }
+  .step.open .step-detail { display: block; }
+
+  .step-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 10px; background: var(--accent); color: white; text-decoration: none; font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 8px; transition: background 0.2s; }
+  .step-link:hover { background: var(--accent-dark); }
+
+  .tip-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 12px 16px; font-size: 13px; color: #92400e; line-height: 1.6; margin-top: 10px; }
+  .tip-box strong { color: #78350f; }
+  .info-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 12px 16px; font-size: 13px; color: #1e40af; line-height: 1.6; margin-top: 10px; }
+  .info-box strong { color: #1e3a8a; }
+  .safe-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 12px 16px; font-size: 13px; color: #166534; line-height: 1.6; margin-top: 10px; }
+  .safe-box strong { color: #14532d; }
+
+  .prompt-box {
+    background: #1e1e2e;
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-top: 12px;
+    font-family: monospace;
+    font-size: 13px;
+    color: #e2e8f0;
+    line-height: 1.7;
+    position: relative;
+  }
+  .prompt-label { font-size: 10px; font-weight: 700; color: #64748b; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; font-family: 'Inter', sans-serif; }
+  .prompt-box .highlight { color: #7dd3fc; }
+  .copy-btn {
+    position: absolute; top: 12px; right: 12px;
+    background: #334155; border: none; color: #94a3b8;
+    font-size: 11px; padding: 4px 10px; border-radius: 6px;
+    cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 600;
+    transition: all 0.2s;
+  }
+  .copy-btn:hover { background: var(--accent); color: white; }
+
+  .checklist { list-style: none; padding: 0; margin-top: 10px; }
+  .checklist li { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text); padding: 6px 0; border-bottom: 1px solid var(--border); line-height: 1.5; }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li::before { content: '○'; color: var(--accent); font-size: 12px; margin-top: 2px; flex-shrink: 0; }
+
+  /* Nav */
+  .nav { display: flex; justify-content: space-between; align-items: center; margin-top: 28px; gap: 12px; }
+  .btn { padding: 12px 24px; border-radius: 10px; font-size: 15px; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s; font-family: 'Inter', sans-serif; }
+  .btn-primary { background: var(--accent); color: white; flex: 1; }
+  .btn-primary:hover { background: var(--accent-dark); }
+  .btn-secondary { background: var(--card); color: var(--muted); border: 1px solid var(--border); }
+  .btn-secondary:hover { color: var(--text); border-color: #bbb; }
+
+  /* Done */
+  .done-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 40px 32px; text-align: center; }
+  .done-emoji { font-size: 56px; display: block; margin-bottom: 20px; }
+  .done-card h2 { font-size: 24px; font-weight: 700; margin-bottom: 10px; }
+  .done-card p { color: var(--muted); font-size: 15px; line-height: 1.7; }
+  .tips-section { margin-top: 24px; text-align: left; }
+  .tips-section h3 { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; }
+  .tip-item { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; font-size: 14px; line-height: 1.6; margin-bottom: 8px; }
+  .tip-item strong { color: var(--accent-dark); }
+  .restart-btn { margin-top: 24px; background: none; border: 1px solid var(--border); color: var(--muted); font-size: 13px; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; transition: all 0.2s; }
+  .restart-btn:hover { color: var(--text); border-color: #aaa; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <span class="emoji">📊</span>
+    <h1>Building Your Own Financial Dashboard</h1>
+    <p>A step-by-step guide to building a custom reporting dashboard<br>using Claude — no coding experience required.</p>
+  </div>
+
+  <!-- Inspiration -->
+  <div class="inspiration">
+    <div class="inspiration-icon">💡</div>
+    <div>
+      <h3>What you're aiming for</h3>
+      <p>Steve built a live financial reporting dashboard for his team at NDIA entirely using Claude — no developer, no agency, no coding background needed. You can do the same thing for Bodycare's financial data. Here's his version as a reference point:</p>
+      <a href="https://sda-dashboard.up.railway.app/login" target="_blank">→ View Steve's SDA Dashboard</a>
+      <div><span class="login-chip">🔑 Login: Sda2026 (case sensitive)</span></div>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-wrap">
+    <div class="progress-step active" id="prog-0" onclick="goToStage(0)">
+      <div class="progress-dot">1</div>
+      <div class="progress-label">Vision</div>
+    </div>
+    <div class="progress-step" id="prog-1" onclick="goToStage(1)">
+      <div class="progress-dot">2</div>
+      <div class="progress-label">Your Data</div>
+    </div>
+    <div class="progress-step" id="prog-2" onclick="goToStage(2)">
+      <div class="progress-dot">3</div>
+      <div class="progress-label">Get the Data Out</div>
+    </div>
+    <div class="progress-step" id="prog-3" onclick="goToStage(3)">
+      <div class="progress-dot">4</div>
+      <div class="progress-label">Scope with Claude</div>
+    </div>
+    <div class="progress-step" id="prog-4" onclick="goToStage(4)">
+      <div class="progress-dot">5</div>
+      <div class="progress-label">Build It</div>
+    </div>
+    <div class="progress-step" id="prog-5" onclick="goToStage(5)">
+      <div class="progress-dot">✓</div>
+      <div class="progress-label">Done!</div>
+    </div>
+  </div>
+
+  <!-- STAGE 1: Vision -->
+  <div class="stage active" id="stage-0">
+    <div class="stage-header">
+      <div class="stage-badge">Stage 1 · Before you open Claude</div>
+      <div class="stage-title">Get Clear on What You Want</div>
+      <div class="stage-sub">The most common mistake is jumping straight into building before knowing what you actually want to see. Spend 20 minutes on this first — it saves hours later.</div>
+    </div>
+    <div class="steps">
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">1</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Write down your 3–5 most important reporting questions</div>
+          <div class="step-detail">
+            Not charts. Not metrics. Questions. The dashboard exists to answer questions you currently have to dig for.<br><br>
+            Examples:
+            <ul class="checklist">
+              <li>Where are we vs budget this month, by cost centre?</li>
+              <li>Which categories are running over and by how much?</li>
+              <li>What does our spend trend look like over the last 6 months?</li>
+              <li>Which departments are the biggest variance drivers?</li>
+            </ul>
+            <div class="tip-box"><strong>Write yours down before moving on.</strong> If you can't articulate the question, the chart won't be useful.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">2</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Build a rough mockup to get the visual shape right</div>
+          <div class="step-detail">
+            You don't need to know how to build it — just sketch what it should look like. Two good options:<br><br>
+            <div class="info-box">
+              <strong>Option A — Lovable (easiest):</strong> Go to lovable.dev, describe what you want in plain English and it'll generate a visual prototype. Free to try.<br><br>
+              <strong>Option B — Claude:</strong> Go to claude.ai, describe your dashboard idea and ask it to generate a mockup as an HTML file you can open in your browser.
+            </div>
+            <div class="tip-box" style="margin-top:10px"><strong>This is just a reference, not the final product.</strong> You're figuring out layout — how many panels, what charts, what tables — so you have something to point at when you start building for real.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">3</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Decide how you want to update it</div>
+          <div class="step-detail">
+            This is a critical decision that shapes the whole build. Pick one:<br><br>
+            <ul class="checklist">
+              <li><strong>Drop a CSV and it refreshes</strong> — you export from NetSuite/your finance system, drop the file in, dashboard updates. Simplest. Recommended to start.</li>
+              <li><strong>Paste data in manually</strong> — you copy numbers into a spreadsheet or form that feeds the dashboard. Works but more manual.</li>
+              <li><strong>Live connection to NetSuite</strong> — dashboard pulls data automatically via API. Most powerful but most complex. Save this for later once you've proven the concept.</li>
+            </ul>
+            <div class="safe-box"><strong>Recommendation: start with CSV drop.</strong> It's fast to build, easy to understand, and you can upgrade to a live connection later once you know exactly what you need.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="nav">
+      <button class="btn btn-primary" onclick="nextStage()">Next: Understand Your Data →</button>
+    </div>
+  </div>
+
+  <!-- STAGE 2: Understand the Data -->
+  <div class="stage" id="stage-1">
+    <div class="stage-header">
+      <div class="stage-badge">Stage 2 · Before you open Claude</div>
+      <div class="stage-title">Understand Your Data</div>
+      <div class="stage-sub">You need to know what data you have, how it's structured, and what it can actually tell you before Claude can help you build anything meaningful.</div>
+    </div>
+    <div class="steps">
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">1</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Export a sample from NetSuite and look at it</div>
+          <div class="step-detail">
+            Pull a real export — even just last month — and open it in Excel. Look at it as raw data, not a report.<br><br>
+            Ask yourself:
+            <ul class="checklist">
+              <li>What are the column names exactly? (Not what you call them — what the system calls them)</li>
+              <li>What format are the dates in? (DD/MM/YYYY, YYYY-MM-DD, text?)</li>
+              <li>Are dollar amounts formatted as numbers or text with $ signs?</li>
+              <li>Are there any blank rows, header rows, or footer totals that would confuse a program?</li>
+              <li>Is there a unique identifier per row — a transaction ID, invoice number, or similar?</li>
+            </ul>
+            <div class="tip-box"><strong>The boring stuff matters.</strong> A date formatted as text instead of a date will break charts. A $ sign in a number column will break calculations. Find these now, not later.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">2</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Map what each reporting question needs</div>
+          <div class="step-detail">
+            Take each question from Stage 1 and identify which columns answer it.<br><br>
+            Example:
+            <div class="prompt-box" style="font-family:'Inter',sans-serif; font-size:13px;">
+              <div class="prompt-label">Example mapping</div>
+              Question: "Where are we vs budget by cost centre?"<br>
+              → Needs: <span class="highlight">cost_centre</span>, <span class="highlight">actual_amount</span>, <span class="highlight">budget_amount</span>, <span class="highlight">period</span><br><br>
+              Question: "Which categories are running over?"<br>
+              → Needs: <span class="highlight">category</span>, <span class="highlight">actual_amount</span>, <span class="highlight">budget_amount</span>
+            </div>
+            <div class="info-box" style="margin-top:10px"><strong>If a column you need doesn't exist in the export</strong>, that's important to find out now. You may need to add it to the export template in NetSuite, or combine two columns.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">3</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Understand what's defined where</div>
+          <div class="step-detail">
+            Some things are calculated in the data itself. Some are defined by business rules that live in someone's head. Know which is which.<br><br>
+            <ul class="checklist">
+              <li>Is budget loaded into NetSuite, or does it live in a spreadsheet somewhere?</li>
+              <li>Are cost centres and department codes consistent month to month, or do they change?</li>
+              <li>What counts as "over budget"? Is there a threshold, or is any variance flagged?</li>
+              <li>Are there categories or codes that should be excluded from certain reports?</li>
+            </ul>
+            <div class="tip-box"><strong>Write these rules down.</strong> You'll need to give them to Claude explicitly — it can only work with what you tell it.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="nav">
+      <button class="btn btn-secondary" onclick="prevStage()">← Back</button>
+      <button class="btn btn-primary" onclick="nextStage()">Next: Get the Data Out →</button>
+    </div>
+  </div>
+
+  <!-- STAGE 3: Get the Data Out -->
+  <div class="stage" id="stage-2">
+    <div class="stage-header">
+      <div class="stage-badge">Stage 3 · Before you open Claude</div>
+      <div class="stage-title">Get a Clean Data Export</div>
+      <div class="stage-sub">Before designing anything, get the actual data out of NetSuite and clean it up. A good dashboard built on messy data is still a mess.</div>
+    </div>
+    <div class="steps">
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">1</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Export at least 3 months of data as CSV</div>
+          <div class="step-detail">
+            In NetSuite, find the report or saved search that most closely matches what you need and export it as CSV. Get at least 3 months so you can test trending and comparisons.<br><br>
+            <div class="info-box"><strong>If NetSuite isn't the source of truth for everything</strong> — e.g. budget lives in Excel — export both. You'll need to tell Claude where each piece of data comes from.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">2</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Clean it up in Excel before using it</div>
+          <div class="step-detail">
+            Fix the things you found in Stage 2. Common ones:<br><br>
+            <ul class="checklist">
+              <li>Remove header rows and footer totals — the data should start on row 1</li>
+              <li>Make sure column names have no spaces or special characters (use underscores: <strong>cost_centre</strong> not <strong>Cost Centre</strong>)</li>
+              <li>Make sure dates are formatted consistently</li>
+              <li>Remove $ signs and commas from number columns so they're pure numbers</li>
+              <li>Delete any completely blank rows</li>
+            </ul>
+            <div class="tip-box"><strong>Save a "raw" copy and a "clean" copy.</strong> Never edit the raw export — always work from a copy.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">3</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Know your numbers before you build</div>
+          <div class="step-detail">
+            Before building the dashboard, manually calculate a few key numbers from your data — total spend for a month, biggest over-budget category, etc.<br><br>
+            <div class="safe-box"><strong>Why this matters:</strong> When Claude builds the dashboard, you need to be able to verify it's correct. If the dashboard shows $847,000 for October and your spreadsheet says $851,000, you'll know something's wrong. If you don't know the right answer going in, you can't catch errors.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="nav">
+      <button class="btn btn-secondary" onclick="prevStage()">← Back</button>
+      <button class="btn btn-primary" onclick="nextStage()">Next: Scope with Claude →</button>
+    </div>
+  </div>
+
+  <!-- STAGE 4: Scope with Claude -->
+  <div class="stage" id="stage-3">
+    <div class="stage-header">
+      <div class="stage-badge">Stage 4 · In Claude</div>
+      <div class="stage-title">Define the Scope with Claude</div>
+      <div class="stage-sub">Don't ask Claude to build anything yet. First, work with it to define exactly what you're building, agree on the MVP, and develop the master prompt together. This is the most important stage.</div>
+    </div>
+    <div class="steps">
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">1</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Open Claude and describe what you want in plain English</div>
+          <div class="step-detail">
+            Go to <a href="https://claude.ai" target="_blank" style="color:var(--accent);font-weight:600">claude.ai</a> and start a new conversation. Don't ask it to build anything — just describe the project. Use this as a starting point:<br><br>
+            <div class="prompt-box">
+              <div class="prompt-label">Starter prompt — copy and edit this</div>
+              <button class="copy-btn" onclick="copyPrompt(this)">Copy</button>
+              I want to build a financial reporting dashboard for my business. I'm the financial controller and I want to replace manual reporting with something visual and interactive.<br><br>
+              <span class="highlight">My data comes from:</span> NetSuite (actuals) and Excel (budget)<br>
+              <span class="highlight">I want to be able to answer these questions:</span><br>
+              1. [Your question 1]<br>
+              2. [Your question 2]<br>
+              3. [Your question 3]<br><br>
+              <span class="highlight">My data is updated:</span> [monthly/weekly/daily]<br>
+              <span class="highlight">I want to load data by:</span> dropping in a CSV file each month<br><br>
+              I don't have a coding background. Can you help me understand what's realistic to build, what the simplest version would look like, and what decisions I need to make before we start building?
+            </div>
+            <div class="info-box" style="margin-top:10px"><strong>Let Claude ask you questions.</strong> A good response will include clarifying questions — answer them honestly. This conversation is doing the architectural thinking so the build goes smoothly.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">2</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Upload your sample CSV and ask Claude to analyse it</div>
+          <div class="step-detail">
+            Once you've described the project, upload your cleaned CSV. Then ask:<br><br>
+            <div class="prompt-box">
+              <div class="prompt-label">Follow-up prompt</div>
+              <button class="copy-btn" onclick="copyPrompt(this)">Copy</button>
+              Here's a sample of my actual data. Can you look at the structure and tell me:<br>
+              1. Whether it has everything needed to answer my reporting questions<br>
+              2. Any problems with the data format you can see<br>
+              3. What columns we'll use for what
+            </div>
+            <div class="tip-box" style="margin-top:10px"><strong>Claude will spot things you missed.</strong> Date format issues, inconsistent category names, missing columns — it'll flag them before they become problems in the build.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">3</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Agree on the MVP — what's in, what's out</div>
+          <div class="step-detail">
+            Before building, explicitly agree with Claude on what version 1 includes. Ask it:<br><br>
+            <div class="prompt-box">
+              <div class="prompt-label">Scoping prompt</div>
+              <button class="copy-btn" onclick="copyPrompt(this)">Copy</button>
+              Based on everything we've discussed, what would a solid MVP look like? Tell me exactly what it would include, what it wouldn't include yet, and what we'd add in a version 2. I want to make sure we're aligned before you start building anything.
+            </div>
+            <div class="safe-box" style="margin-top:10px"><strong>Don't skip this step.</strong> Getting agreement on scope before building is what stops you ending up with something half-finished or that tries to do too much at once.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">4</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Get Claude to write the master prompt</div>
+          <div class="step-detail">
+            Once you're aligned on scope, ask Claude to produce a single master prompt that captures everything — the data structure, the requirements, the rules, the MVP. You'll use this as the brief for the actual build.<br><br>
+            <div class="prompt-box">
+              <div class="prompt-label">Master prompt request</div>
+              <button class="copy-btn" onclick="copyPrompt(this)">Copy</button>
+              Great. Can you now write a master prompt that summarises everything we've agreed — the data structure, the reporting requirements, the business rules, the MVP scope, and any technical decisions we've made? I'll use this as the brief when we start building.
+            </div>
+            <div class="info-box" style="margin-top:10px"><strong>Save this master prompt.</strong> It's your north star for the whole build — and if something goes wrong later, you can start a fresh conversation and paste it in to get back on track instantly.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="nav">
+      <button class="btn btn-secondary" onclick="prevStage()">← Back</button>
+      <button class="btn btn-primary" onclick="nextStage()">Next: Build It →</button>
+    </div>
+  </div>
+
+  <!-- STAGE 5: Build -->
+  <div class="stage" id="stage-4">
+    <div class="stage-header">
+      <div class="stage-badge">Stage 5 · In Claude</div>
+      <div class="stage-title">Build, Test, and Iterate</div>
+      <div class="stage-sub">Now you build. The work you did in the previous stages means Claude has everything it needs. Your job now is to test, validate, and add on once the core works.</div>
+    </div>
+    <div class="steps">
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">1</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Start the build with your master prompt</div>
+          <div class="step-detail">
+            Start a new Claude conversation, paste in your master prompt, then add:<br><br>
+            <div class="prompt-box">
+              <div class="prompt-label">Build kickoff</div>
+              <button class="copy-btn" onclick="copyPrompt(this)">Copy</button>
+              Using this brief, please build the MVP dashboard. Start with the data loading and the first two charts only. I want to verify those are working correctly before we add anything else.
+            </div>
+            <div class="tip-box" style="margin-top:10px"><strong>Build in small pieces.</strong> Ask for one section at a time and test each one before moving on. It's much easier to fix a small piece than unpick a fully built dashboard.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">2</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Validate the numbers before you trust it</div>
+          <div class="step-detail">
+            Once Claude gives you a working dashboard, load your real data and check the numbers against what you calculated manually in Stage 3.<br><br>
+            <ul class="checklist">
+              <li>Does total spend for a known month match?</li>
+              <li>Does the biggest over-budget category match your spreadsheet?</li>
+              <li>Do trends look right directionally — peaks and dips where you'd expect them?</li>
+            </ul>
+            <div class="safe-box"><strong>If something doesn't match</strong>, tell Claude exactly what you expected vs what you got. It'll diagnose and fix it. Never assume it's right — always verify with numbers you already know.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">3</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Add things one at a time once the core works</div>
+          <div class="step-detail">
+            Once the base is validated, add your additional requirements one by one. For each new feature:<br><br>
+            <ul class="checklist">
+              <li>Describe what you want in plain English</li>
+              <li>Ask Claude to add it without breaking what's already working</li>
+              <li>Test it with real data before moving to the next feature</li>
+            </ul>
+            <div class="tip-box"><strong>Resist the urge to ask for everything at once.</strong> One change at a time means you always know what broke something if something breaks.</div>
+          </div>
+        </div>
+      </div>
+      <div class="step" onclick="toggleStep(this)">
+        <div class="step-num"><span class="step-num-num">4</span><span class="step-num-check">✓</span></div>
+        <div class="step-body">
+          <div class="step-title">Understand how to maintain it yourself</div>
+          <div class="step-detail">
+            Before you consider the dashboard "done", ask Claude:<br><br>
+            <div class="prompt-box">
+              <div class="prompt-label">Maintenance prompt</div>
+              <button class="copy-btn" onclick="copyPrompt(this)">Copy</button>
+              Can you explain to me in plain English: how do I update this with new data each month? And if something breaks — like a column name changes in my export — how do I fix it? I want to be able to maintain this myself without coming back to you every time.
+            </div>
+            <div class="info-box" style="margin-top:10px"><strong>You own this tool.</strong> Claude built it with you, but it's yours. Most maintenance tasks — updating data, tweaking a chart, fixing a column name — are a 5-minute conversation with Claude, not a developer job.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="nav">
+      <button class="btn btn-secondary" onclick="prevStage()">← Back</button>
+      <button class="btn btn-primary" onclick="nextStage()">I'm done! →</button>
+    </div>
+  </div>
+
+  <!-- DONE -->
+  <div class="stage" id="stage-5">
+    <div class="done-card">
+      <span class="done-emoji">🚀</span>
+      <h2>You've got this.</h2>
+      <p>You now have a clear process for building a financial dashboard that actually reflects how Bodycare works — not a generic template someone else designed.</p>
+      <div class="tips-section">
+        <h3>Key principles to keep in mind</h3>
+        <div class="tip-item"><strong>Start narrow.</strong> One data source, 3 charts, one clear question answered well. Expand from there.</div>
+        <div class="tip-item"><strong>Data quality first.</strong> A beautiful dashboard on dirty data gives you beautiful wrong answers. Fix the data before you build.</div>
+        <div class="tip-item"><strong>Know the right answer before you test.</strong> Always validate with numbers you already trust.</div>
+        <div class="tip-item"><strong>Don't login to everything via GitHub.</strong> Use an email address. Keep credentials separate per service.</div>
+        <div class="tip-item"><strong>You own it.</strong> This isn't something a developer built for you — it's something you built with Claude. That means you can fix it, change it, and extend it yourself.</div>
+      </div>
+      <button class="restart-btn" onclick="restart()">↩ Start from the beginning</button>
+    </div>
+  </div>
+
+</div>
+<script>
+  var current = 0, total = 6;
+
+  function goToStage(n) {
+    document.getElementById('stage-' + current).classList.remove('active');
+    document.getElementById('prog-' + current).classList.remove('active');
+    current = n;
+    document.getElementById('stage-' + current).classList.add('active');
+    updateProgress();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function nextStage() { if (current < total - 1) goToStage(current + 1); }
+  function prevStage() { if (current > 0) goToStage(current - 1); }
+
+  function updateProgress() {
+    for (var i = 0; i < total; i++) {
+      var el = document.getElementById('prog-' + i);
+      el.classList.remove('active', 'done');
+      if (i < current) el.classList.add('done');
+      if (i === current) el.classList.add('active');
+    }
+  }
+
+  function toggleStep(el) {
+    var isOpen = el.classList.contains('open');
+    el.closest('.steps').querySelectorAll('.step').forEach(function(s) { s.classList.remove('open'); });
+    if (!isOpen) { el.classList.add('open'); }
+    else { el.classList.toggle('checked'); }
+  }
+
+  function copyPrompt(btn) {
+    var box = btn.parentElement;
+    var text = box.innerText.replace('Copy', '').replace(/^\s*[A-Z\s]+\n/, '').trim();
+    navigator.clipboard.writeText(text).then(function() {
+      btn.textContent = 'Copied!';
+      setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+    });
+  }
+
+  function restart() {
+    document.querySelectorAll('.step').forEach(function(s) { s.classList.remove('checked', 'open'); });
+    goToStage(0);
+  }
+</script>
+</body>
+</html>
