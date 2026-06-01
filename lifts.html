@@ -205,7 +205,7 @@ function loadDB(){
   if(!d.history) d.history=[];
   if(!d.settings) d.settings={};
   var s=d.settings; if(!s.units)s.units='kg'; if(!s.rest)s.rest=90;
-  if(s.syncUrl===undefined)s.syncUrl=''; if(s.syncKey===undefined)s.syncKey=''; if(s.syncCode===undefined)s.syncCode='';
+  if(!s.syncUrl)s.syncUrl='https://aedzmfogyiusxnvezqgu.supabase.co'; if(!s.syncKey)s.syncKey='sb_publishable_1SIeZ5LgzTibvAf6Vmt3YA_KrCaSuyi'; if(s.syncCode===undefined)s.syncCode='';
   if(s.lastSync===undefined)s.lastSync=0;
   if(!('active'in d)) d.active=null;
   if(!d.updatedAt) d.updatedAt=Date.now();
@@ -541,14 +541,9 @@ function openSettings(){
     '<div class="field"><label>Units</label><div class="seg"><button class="'+(s.units==='kg'?'on':'')+'" onclick="setUnits(\'kg\')">kg</button><button class="'+(s.units==='lb'?'on':'')+'" onclick="setUnits(\'lb\')">lb</button></div></div>'+
     '<div class="field"><label>Default rest (seconds)</label><input type="number" inputmode="numeric" value="'+s.rest+'" onchange="DB.settings.rest=parseInt(this.value)||90;save()"></div>'+
     '<div class="sec-label" style="margin:14px 4px 8px">Sync across devices</div>'+
-    '<div class="help">Sync needs a free Supabase project (one-time setup).<ol>'+
-    '<li>Create a project at <code>supabase.com</code></li>'+
-    '<li>In the SQL editor, run:<br><code>create table lift_sync(code text primary key, data jsonb, updated_at bigint); alter table lift_sync enable row level security; create policy a on lift_sync for all using(true) with check(true);</code></li>'+
-    '<li>Settings → API: copy the <b>Project URL</b> and <b>anon public key</b> below.</li>'+
-    '<li>Pick a secret sync code, enter the same one on every device.</li></ol></div>'+
-    '<div class="field"><label>Supabase Project URL</label><input id="syncUrl" placeholder="https://xxxx.supabase.co" value="'+esc(s.syncUrl)+'"></div>'+
-    '<div class="field"><label>Anon public key</label><input id="syncKey" placeholder="eyJ…" value="'+esc(s.syncKey)+'"></div>'+
+    '<div class="help">The server is already set up. Just pick a secret <b>sync code</b> and enter the same one on every device — that links them. Anyone with your code can read your data, so keep it private.</div>'+
     '<div class="field"><label>Sync code (secret, same on all devices)</label><input id="syncCode" placeholder="e.g. steve-lifts-7Q2x" value="'+esc(s.syncCode)+'"></div>'+
+    '<input type="hidden" id="syncUrl" value="'+esc(s.syncUrl)+'"><input type="hidden" id="syncKey" value="'+esc(s.syncKey)+'">'+
     '<div class="row"><button class="btn ghost sm" style="flex:1" onclick="genCode()">Generate code</button><button class="btn sm" style="flex:1" onclick="saveSync(true)">Save &amp; Sync now</button></div>'+
     '<div class="s" style="text-align:center;color:var(--muted);font-size:12px;margin-top:10px">'+(s.lastSync?'Last synced '+fmtDateTime(s.lastSync):'Not synced yet')+'</div>'+
     '<div class="sec-label" style="margin:18px 4px 8px">Strava</div>'+
