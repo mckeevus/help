@@ -223,6 +223,7 @@ function loadDB(){
   if(!d) d={};
   if(!d.exercises) d.exercises=seedExercises();
   if(!d.routines) d.routines=[];
+  if(!d.blocks) d.blocks=[];
   if(!d.history) d.history=[];
   if(!d.settings) d.settings={};
   var s=d.settings; if(!s.units)s.units='kg'; if(!s.rest)s.rest=90;
@@ -505,27 +506,60 @@ function openRoutineEditor(){
     var seg='<div class="kindseg">'+['standard','timed','superset','fast50'].map(function(k){return '<button class="'+(kind===k?'on':'')+'" onclick="setKind('+gi+',\''+k+'\')">'+kindLabel(k)+'</button>';}).join('')+'</div>';
     var exs=(g.exercises||[]).map(function(x,xi){return excFields(gi,xi,x,kind);}).join('');
     var canAdd=!(kind==='standard'&&(g.exercises||[]).length>=1);
+    var hasEx=(g.exercises||[]).length>0;
     return '<div class="blk-edit"><div class="bh"><span class="nm">Block '+(gi+1)+'</span><div class="mini">'+
       '<button onclick="moveGroup('+gi+',-1)">↑</button><button onclick="moveGroup('+gi+',1)">↓</button><button onclick="rmGroup('+gi+')">✕</button></div></div>'+
       seg+
       '<label>Block label (optional, e.g. Warm-up, A1)</label><input value="'+esc(g.label||'')+'" oninput="grpSet('+gi+',\'label\',this.value)">'+
       grpFields(gi,g,kind)+
       (exs||'<div class="s" style="color:var(--faint);font-size:12px;padding:6px 0">No exercises in this block yet.</div>')+
-      (canAdd?'<button class="btn ghost sm" style="margin-top:8px" onclick="addExcToGroup('+gi+')">＋ Add exercise</button>':'')+
+      '<div class="two" style="margin-top:8px">'+
+      (canAdd?'<button class="btn ghost sm" onclick="addExcToGroup('+gi+')">＋ Add exercise</button>':'<div></div>')+
+      (hasEx?'<button class="btn ghost sm" onclick="saveBlockToLib('+gi+')">💾 Save block</button>':'<div></div>')+
+      '</div>'+
     '</div>';
   }).join('');
   openModal(
     '<div class="sheet-head"><h3>'+(r._new?'New Routine':'Edit Routine')+'</h3><button class="close" onclick="closeModal()">✕</button></div>'+
-    '<div class="sheet-body">'+
+    '<div class="sheet-body" id="rt-body" onscroll="rtScroll=this.scrollTop">'+
     '<div class="field"><label>Routine name</label><input id="rt-name" placeholder="e.g. Doubling — Shoulders" value="'+esc(r.name)+'" oninput="editingRoutine.name=this.value"></div>'+
     '<div class="sec-label" style="margin:6px 4px 8px">Blocks</div>'+
-    '<div class="help">Pick how each block flows: <b>Straight</b> sets, a <b>Timed</b> block (cap includes rest), a <b>Superset</b> (2+ exercises, optional time cap), or a <b>Fast 50</b> ladder.</div>'+
+    '<div class="help">Pick how each block flows: <b>Straight</b> sets, a <b>Timed</b> block (cap includes rest), a <b>Superset</b> (2+ exercises, optional time cap), or a <b>Fast 50</b> ladder. Save a block to reuse it in other routines.</div>'+
     (groups||'<div class="empty" style="padding:18px">No blocks yet</div>')+
-    '<button class="btn ghost" onclick="addGroup()">＋ Add Block</button>'+
+    '<div class="two"><button class="btn ghost" onclick="addGroup()">＋ Add Block</button><button class="btn ghost" onclick="addSavedBlock()">＋ Saved Block</button></div>'+
     '<button class="btn" style="margin-top:14px" onclick="saveRoutine()">Save Routine</button>'+
     (r._new?'':'<button class="btn ghost red" style="margin-top:10px" onclick="deleteRoutine()">Delete Routine</button>')+
     '</div>'
   );
+  var rb=document.getElementById('rt-body');if(rb)rb.scrollTop=rtScroll;
+}
+var rtScroll=0;
+function saveBlockToLib(gi){
+  var g=editingRoutine.groups[gi];
+  if(!g.exercises||!g.exercises.length){alert('Add an exercise to the block first.');return;}
+  var first=exById(g.exercises[0].exId);
+  var def=g.label||(first?first.name:'')||kindLabel(g.kind);
+  var name=prompt('Save this block as:',def);if(!name||!name.trim())return;
+  var copy=JSON.parse(JSON.stringify(g));copy.libId=uid();copy.libName=name.trim();
+  DB.blocks.unshift(copy);save();toast('Block saved — reuse via ＋ Saved Block');
+}
+function addSavedBlock(){
+  if(!DB.blocks.length){toast('No saved blocks yet — use 💾 Save block first');return;}
+  var rows=DB.blocks.map(function(b){
+    var names=(b.exercises||[]).map(function(x){var e=exById(x.exId);return e?e.name:'';}).filter(Boolean).join(', ');
+    return '<div class="pick" onclick="insertSavedBlock(\''+b.libId+'\')"><div class="grow"><div class="t" style="font-weight:600">'+esc(b.libName)+' <span class="grp-badge">'+kindLabel(b.kind)+'</span></div><div class="mg">'+esc(names)+'</div></div><button class="x" onclick="event.stopPropagation();deleteSavedBlock(\''+b.libId+'\')">🗑</button></div>';
+  }).join('');
+  openModal('<div class="sheet-head"><h3>Saved Blocks</h3><button class="close" onclick="openRoutineEditor()">✕</button></div>'+
+    '<div class="sheet-body">'+rows+'</div>');
+}
+function insertSavedBlock(libId){
+  var src=DB.blocks.filter(function(b){return b.libId===libId;})[0];if(!src)return;
+  var g=JSON.parse(JSON.stringify(src));g.id=uid();delete g.libId;delete g.libName;
+  editingRoutine.groups.push(g);openRoutineEditor();
+}
+function deleteSavedBlock(libId){
+  if(!confirm('Remove this saved block?'))return;
+  DB.blocks=DB.blocks.filter(function(b){return b.libId!==libId;});save();addSavedBlock();
 }
 function grpSet(gi,k,v){editingRoutine.groups[gi][k]=v;}
 function excSet(gi,xi,k,v){editingRoutine.groups[gi].exercises[xi][k]=v;}
@@ -698,13 +732,13 @@ function syncNow(silent){
   fetch(url,{headers:sbHeaders()}).then(function(r){return r.json();}).then(function(rows){
     var remote=rows&&rows[0];
     if(remote&&remote.updated_at&&remote.updated_at>(DB.updatedAt||0)){
-      var d=remote.data;DB.exercises=d.exercises||DB.exercises;DB.routines=(d.routines||[]);DB.routines.forEach(migrateRoutine);DB.history=d.history||[];if(d.settings){d.settings.syncUrl=DB.settings.syncUrl;d.settings.syncKey=DB.settings.syncKey;d.settings.syncCode=DB.settings.syncCode;DB.settings=d.settings;}
+      var d=remote.data;DB.exercises=d.exercises||DB.exercises;DB.routines=(d.routines||[]);DB.routines.forEach(migrateRoutine);DB.blocks=d.blocks||[];DB.history=d.history||[];if(d.settings){d.settings.syncUrl=DB.settings.syncUrl;d.settings.syncKey=DB.settings.syncKey;d.settings.syncCode=DB.settings.syncCode;DB.settings=d.settings;}
       DB.updatedAt=remote.updated_at;DB.settings.lastSync=Date.now();saveQuiet();refreshAll();if(!silent)toast('Pulled latest from cloud ⬇');
     }else{pushSync(silent);}
   }).catch(function(e){if(!silent)toast('Sync failed — check details');});
 }
 function pushSync(silent){
-  var payload={code:DB.settings.syncCode,data:{exercises:DB.exercises,routines:DB.routines,history:DB.history,settings:DB.settings},updated_at:DB.updatedAt||Date.now()};
+  var payload={code:DB.settings.syncCode,data:{exercises:DB.exercises,routines:DB.routines,blocks:DB.blocks,history:DB.history,settings:DB.settings},updated_at:DB.updatedAt||Date.now()};
   fetch(DB.settings.syncUrl+'/rest/v1/lift_sync',{method:'POST',headers:Object.assign(sbHeaders(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(payload)})
     .then(function(r){if(!r.ok)throw 0;DB.settings.lastSync=Date.now();saveQuiet();if(!silent)toast('Synced to cloud ⬆');})
     .catch(function(e){if(!silent)toast('Sync push failed');});
