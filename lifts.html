@@ -131,6 +131,8 @@
   .help{font-size:12px;color:var(--muted);line-height:1.6;background:var(--bg);border:1px solid var(--line);border-radius:11px;padding:12px 14px;margin-bottom:12px;}
   .help code{background:#eef0f3;padding:1px 5px;border-radius:4px;font-size:11px;word-break:break-all;}
   .help ol{margin:8px 0 0 18px;}.help li{margin-bottom:5px;}
+  .ck{display:flex;align-items:center;gap:9px;font-size:14px;color:var(--text);padding:4px 2px;}
+  .ck input{width:18px;height:18px;}
 </style>
 </head>
 <body>
@@ -340,6 +342,7 @@ function finishWorkout(){
   var prs=detectPRs(done);
   var w={id:uid(),name:DB.active.name,date:Date.now(),duration:Math.floor((Date.now()-DB.active.startedAt)/1000),items:done,prs:prs};
   DB.history.unshift(w);DB.active=null;save();stopRest();
+  if(DB.settings.strava&&DB.settings.stravaAuto)postToStrava(w);
   if(prs.length)showPRModal(w,prs);else{toast('Workout saved 💪');tab('history');}
 }
 function priorBests(exId){
@@ -548,6 +551,13 @@ function openSettings(){
     '<div class="field"><label>Sync code (secret, same on all devices)</label><input id="syncCode" placeholder="e.g. steve-lifts-7Q2x" value="'+esc(s.syncCode)+'"></div>'+
     '<div class="row"><button class="btn ghost sm" style="flex:1" onclick="genCode()">Generate code</button><button class="btn sm" style="flex:1" onclick="saveSync(true)">Save &amp; Sync now</button></div>'+
     '<div class="s" style="text-align:center;color:var(--muted);font-size:12px;margin-top:10px">'+(s.lastSync?'Last synced '+fmtDateTime(s.lastSync):'Not synced yet')+'</div>'+
+    '<div class="sec-label" style="margin:18px 4px 8px">Strava</div>'+
+    (s.strava
+      ? '<div class="help">Connected'+(s.strava.athlete?' as <b>'+esc(s.strava.athlete)+'</b>':'')+'. Finished workouts post automatically as a Weight Training activity, just like Hevy.</div>'+
+        '<label class="ck"><input type="checkbox" '+(s.stravaAuto?'checked':'')+' onchange="DB.settings.stravaAuto=this.checked;save()"> Auto-post workouts to Strava</label>'+
+        '<button class="btn ghost sm" style="margin-top:10px" onclick="stravaDisconnect()">Disconnect Strava</button>'
+      : '<div class="help">Posts each finished workout to Strava as a Weight Training activity (title, time, and every set in the description) — like Hevy. Needs the one-time Strava app setup on the server first.</div>'+
+        '<button class="btn sm" onclick="stravaConnect()">Connect to Strava</button>')+
     '<div class="sec-label" style="margin:18px 4px 8px">Backup (no setup)</div>'+
     '<div class="row"><button class="btn ghost sm" style="flex:1" onclick="doExport()">Export JSON</button><button class="btn ghost sm" style="flex:1" onclick="document.getElementById(\'importFile\').click()">Import JSON</button></div>'+
     '<div class="s" style="color:var(--muted);font-size:12px;margin-top:8px">Export downloads all your data. Import replaces everything on this device.</div>'+
@@ -594,6 +604,51 @@ function doImport(input){
   var rd=new FileReader();rd.onload=function(){try{var d=JSON.parse(rd.result);if(!confirm('Replace ALL data on this device with the imported file?'))return;DB=d;if(!DB.settings)DB.settings={units:'kg',rest:90};DB.routines.forEach(migrateRoutine);save();closeModal();refreshAll();tab('workout');toast('Data imported');}catch(e){alert('Could not read that file.');}};rd.readAsText(f);input.value='';
 }
 
+/* ───────── strava ───────── */
+var STRAVA_FN='https://aedzmfogyiusxnvezqgu.supabase.co/functions/v1/strava';
+function stravaFetch(body){return fetch(STRAVA_FN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json();});}
+function stravaConnect(){
+  toast('Opening Strava…');
+  stravaFetch({action:'config'}).then(function(d){
+    if(!d.client_id){toast('Server not set up yet — add Strava keys in Supabase');return;}
+    var redirect=location.origin+location.pathname;
+    location.href='https://www.strava.com/oauth/authorize?client_id='+encodeURIComponent(d.client_id)+'&redirect_uri='+encodeURIComponent(redirect)+'&response_type=code&approval_prompt=auto&scope=activity:write';
+  }).catch(function(){toast('Could not reach Strava server');});
+}
+function stravaDisconnect(){DB.settings.strava=null;DB.settings.stravaAuto=false;save();openSettings();}
+function stravaHandleRedirect(){
+  var p=new URLSearchParams(location.search),code=p.get('code');
+  if(!code)return;
+  history.replaceState({},'',location.origin+location.pathname);
+  if(p.get('error')){toast('Strava connect cancelled');return;}
+  stravaFetch({action:'exchange',code:code}).then(function(d){
+    if(d.access_token){DB.settings.strava={access_token:d.access_token,refresh_token:d.refresh_token,expires_at:d.expires_at,athlete:d.athlete||''};DB.settings.stravaAuto=true;save();toast('Connected to Strava ✅');}
+    else toast('Strava connect failed');
+  }).catch(function(){toast('Strava connect failed');});
+}
+function stravaToken(cb){
+  var s=DB.settings.strava;if(!s){cb(null);return;}
+  if(s.expires_at&&s.expires_at*1000>Date.now()+60000){cb(s.access_token);return;}
+  stravaFetch({action:'refresh',refresh_token:s.refresh_token}).then(function(d){
+    if(d.access_token){s.access_token=d.access_token;s.refresh_token=d.refresh_token;s.expires_at=d.expires_at;save();cb(d.access_token);}else cb(null);
+  }).catch(function(){cb(null);});
+}
+function stravaDescription(w){
+  var lines=['Logged with Lifts',''];
+  w.items.forEach(function(it){var e=exById(it.exId);lines.push((it.glabel?it.glabel+' ':'')+(e?e.name:'Exercise'));
+    it.sets.forEach(function(s,i){lines.push('Set '+(i+1)+': '+s.weight+' '+u()+' x '+s.reps);});lines.push('');});
+  if(w.prs&&w.prs.length)lines.push('🏆 '+w.prs.length+' new PB'+(w.prs.length>1?'s':''));
+  return lines.join('\n').trim();
+}
+function postToStrava(w){
+  stravaToken(function(tok){
+    if(!tok){toast('Strava token expired — reconnect in Settings');return;}
+    stravaFetch({action:'post',access_token:tok,name:w.name,elapsed_time:w.duration,start_date_local:new Date(w.date).toISOString().replace('Z',''),description:stravaDescription(w)})
+      .then(function(d){toast(d.ok?'Posted to Strava 🏃':'Strava post failed');})
+      .catch(function(){toast('Strava post failed');});
+  });
+}
+
 /* ───────── modal/util ───────── */
 function openModal(html){document.getElementById('sheet').innerHTML=html;document.getElementById('modal').classList.add('open');}
 function closeModal(){document.getElementById('modal').classList.remove('open');}
@@ -607,6 +662,7 @@ function fmtDateTime(ts){return new Date(ts).toLocaleString('en-AU',{day:'numeri
 
 /* ───────── boot ───────── */
 awTimerInt=setInterval(tickAw,1000);
+stravaHandleRedirect();
 if(syncConfigured())setTimeout(function(){syncNow(true);},800);
 if(DB.active){showActive();}else{renderWorkoutHome();}
 </script>
