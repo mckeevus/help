@@ -117,8 +117,14 @@
   .blk-edit .bh .nm{font-weight:700;flex:1;}
   .mini{display:flex;gap:6px;}
   .mini button{font-size:14px;color:var(--muted);padding:4px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);}
-  .blk-edit input,.blk-edit textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:var(--card);margin-bottom:8px;}
-  .blk-edit label{font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:3px;}
+  .blk-edit input,.blk-edit textarea,#be-body input,#be-body textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:var(--card);margin-bottom:8px;}
+  .blk-edit label,#be-body label{font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:3px;}
+  .blk-card{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:13px 14px;margin-bottom:10px;background:var(--card);}
+  .blk-card:active{background:var(--bg);}
+  .blk-card .grow{flex:1;min-width:0;}
+  .blk-card .bc-t{font-weight:700;font-size:15px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .blk-card .bc-meta{font-size:12px;color:var(--muted);margin-top:3px;}
+  .blk-card .chev{color:var(--faint);font-size:22px;line-height:1;}
   .two{display:flex;gap:8px;}.two>div{flex:1;}
   .grp-block{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-bottom:14px;}
   .grp-block .ex-block{border:none;background:transparent;padding:0;margin:0 0 10px;}
@@ -499,41 +505,69 @@ function excFields(gi,xi,x,kind){
   h+='<label>Notes</label><input value="'+esc(x.notes||'')+'" oninput="excSet('+gi+','+xi+',\'notes\',this.value)"></div>';
   return h;
 }
+function blockSummary(g){
+  var kind=g.kind||'standard';
+  if(kind==='fast50')return 'Fast 50 · '+(g.ladder||'14/12/10/8/6')+' reps';
+  function rounds(n){n=parseInt(n)||1;return n+' round'+(n>1?'s':'');}
+  if(kind==='timed'){var p=[(g.timeCap||'3:00')+' cap (incl. rest)'];p.push(rounds(g.rounds));return p.join(' · ');}
+  if(kind==='superset'){var p=[rounds(g.rounds)];if(g.timeCap)p.push(g.timeCap+' cap');if(g.rest)p.push(g.rest+'s rest');return p.join(' · ');}
+  var x=(g.exercises||[])[0]||{};var s=[(parseInt(g.rounds)||3)+' sets'];if(x.reps)s.push(x.reps+' reps');if(x.rir!=null&&x.rir!=='')s.push(x.rir+' RIR');if(g.rest)s.push(g.rest+'s rest');return s.join(' · ');
+}
 function openRoutineEditor(){
   var r=editingRoutine;
   var groups=(r.groups||[]).map(function(g,gi){
     var kind=g.kind||'standard';
-    var seg='<div class="kindseg">'+['standard','timed','superset','fast50'].map(function(k){return '<button class="'+(kind===k?'on':'')+'" onclick="setKind('+gi+',\''+k+'\')">'+kindLabel(k)+'</button>';}).join('')+'</div>';
-    var exs=(g.exercises||[]).map(function(x,xi){return excFields(gi,xi,x,kind);}).join('');
-    var canAdd=!(kind==='standard'&&(g.exercises||[]).length>=1);
-    var hasEx=(g.exercises||[]).length>0;
-    return '<div class="blk-edit"><div class="bh"><span class="nm">Block '+(gi+1)+'</span><div class="mini">'+
-      '<button onclick="moveGroup('+gi+',-1)">↑</button><button onclick="moveGroup('+gi+',1)">↓</button><button onclick="rmGroup('+gi+')">✕</button></div></div>'+
-      seg+
-      '<label>Block label (optional, e.g. Warm-up, A1)</label><input value="'+esc(g.label||'')+'" oninput="grpSet('+gi+',\'label\',this.value)">'+
-      grpFields(gi,g,kind)+
-      (exs||'<div class="s" style="color:var(--faint);font-size:12px;padding:6px 0">No exercises in this block yet.</div>')+
-      '<div class="two" style="margin-top:8px">'+
-      (canAdd?'<button class="btn ghost sm" onclick="addExcToGroup('+gi+')">＋ Add exercise</button>':'<div></div>')+
-      (hasEx?'<button class="btn ghost sm" onclick="saveBlockToLib('+gi+')">💾 Save block</button>':'<div></div>')+
-      '</div>'+
-    '</div>';
+    var names=(g.exercises||[]).map(function(x){var e=exById(x.exId);return e?e.name:'?';});
+    var nm=names.length?names.join('  +  '):'<span style="color:var(--faint);font-weight:600">Tap to add an exercise</span>';
+    var flags='';
+    if((g.exercises||[]).some(function(x){return x.oneHalf;}))flags+='<span class="sbadge">1½</span>';
+    if((g.exercises||[]).some(function(x){return x.dropSet;}))flags+='<span class="sbadge">Drop</span>';
+    return '<div class="blk-card" onclick="beScroll=0;openBlockEditor('+gi+')">'+
+      '<div class="grow"><div class="bc-t">'+nm+' <span class="grp-badge">'+kindLabel(kind)+'</span>'+flags+'</div>'+
+      '<div class="bc-meta">'+(g.label?esc(g.label)+' · ':'')+esc(blockSummary(g))+'</div></div>'+
+      '<div class="mini" onclick="event.stopPropagation()"><button onclick="moveGroup('+gi+',-1)">↑</button><button onclick="moveGroup('+gi+',1)">↓</button></div>'+
+      '<span class="chev">›</span></div>';
   }).join('');
   openModal(
     '<div class="sheet-head"><h3>'+(r._new?'New Routine':'Edit Routine')+'</h3><button class="close" onclick="closeModal()">✕</button></div>'+
     '<div class="sheet-body" id="rt-body" onscroll="rtScroll=this.scrollTop">'+
     '<div class="field"><label>Routine name</label><input id="rt-name" placeholder="e.g. Doubling — Shoulders" value="'+esc(r.name)+'" oninput="editingRoutine.name=this.value"></div>'+
-    '<div class="sec-label" style="margin:6px 4px 8px">Blocks</div>'+
-    '<div class="help">Pick how each block flows: <b>Straight</b> sets, a <b>Timed</b> block (cap includes rest), a <b>Superset</b> (2+ exercises, optional time cap), or a <b>Fast 50</b> ladder. Save a block to reuse it in other routines.</div>'+
-    (groups||'<div class="empty" style="padding:18px">No blocks yet</div>')+
-    '<div class="two"><button class="btn ghost" onclick="addGroup()">＋ Add Block</button><button class="btn ghost" onclick="addSavedBlock()">＋ Saved Block</button></div>'+
+    '<div class="sec-label" style="margin:14px 4px 8px">Blocks</div>'+
+    (groups||'<div class="empty" style="padding:18px">No blocks yet — add one below.</div>')+
+    '<div class="two" style="margin-top:6px"><button class="btn ghost" onclick="addGroup()">＋ Add Block</button><button class="btn ghost" onclick="addSavedBlock()">＋ Saved Block</button></div>'+
     '<button class="btn" style="margin-top:14px" onclick="saveRoutine()">Save Routine</button>'+
     (r._new?'':'<button class="btn ghost red" style="margin-top:10px" onclick="deleteRoutine()">Delete Routine</button>')+
     '</div>'
   );
   var rb=document.getElementById('rt-body');if(rb)rb.scrollTop=rtScroll;
 }
-var rtScroll=0;
+var rtScroll=0,beScroll=0,editingGroupIdx=null;
+function openBlockEditor(gi){
+  editingGroupIdx=gi;
+  var g=editingRoutine.groups[gi];
+  if(!g){openRoutineEditor();return;}
+  var kind=g.kind||'standard';
+  var seg='<div class="kindseg">'+['standard','timed','superset','fast50'].map(function(k){return '<button class="'+(kind===k?'on':'')+'" onclick="setKind('+gi+',\''+k+'\')">'+kindLabel(k)+'</button>';}).join('')+'</div>';
+  var exs=(g.exercises||[]).map(function(x,xi){return excFields(gi,xi,x,kind);}).join('');
+  var canAdd=!(kind==='standard'&&(g.exercises||[]).length>=1);
+  var hasEx=(g.exercises||[]).length>0;
+  openModal(
+    '<div class="sheet-head"><button class="close" onclick="openRoutineEditor()">‹</button><h3>Edit Block</h3><button class="close" style="font-size:15px;font-weight:700;color:var(--accent)" onclick="openRoutineEditor()">Done</button></div>'+
+    '<div class="sheet-body" id="be-body" onscroll="beScroll=this.scrollTop">'+
+    '<div class="help">How does this block flow? <b>Straight</b> sets, a <b>Timed</b> block (cap includes rest), a <b>Superset</b> (2+ exercises), or a <b>Fast 50</b> ladder.</div>'+
+    seg+
+    '<label>Block label (optional, e.g. Warm-up, A1)</label><input value="'+esc(g.label||'')+'" oninput="grpSet('+gi+',\'label\',this.value)">'+
+    grpFields(gi,g,kind)+
+    '<div class="sec-label" style="margin:16px 4px 8px">Exercises</div>'+
+    (exs||'<div class="empty" style="padding:14px">No exercises yet.</div>')+
+    (canAdd?'<button class="btn ghost sm" style="width:100%;margin-top:8px" onclick="addExcToGroup('+gi+')">＋ Add exercise</button>':'')+
+    (hasEx?'<button class="btn ghost sm" style="width:100%;margin-top:8px" onclick="saveBlockToLib('+gi+')">💾 Save block to library</button>':'')+
+    '<button class="btn" style="margin-top:18px" onclick="openRoutineEditor()">Done</button>'+
+    '<button class="btn ghost red" style="margin-top:10px" onclick="rmGroup('+gi+')">Delete block</button>'+
+    '</div>'
+  );
+  var bb=document.getElementById('be-body');if(bb)bb.scrollTop=beScroll;
+}
 function saveBlockToLib(gi){
   var g=editingRoutine.groups[gi];
   if(!g.exercises||!g.exercises.length){alert('Add an exercise to the block first.');return;}
@@ -563,16 +597,16 @@ function deleteSavedBlock(libId){
 }
 function grpSet(gi,k,v){editingRoutine.groups[gi][k]=v;}
 function excSet(gi,xi,k,v){editingRoutine.groups[gi].exercises[xi][k]=v;}
-function excToggle(gi,xi,k){var x=editingRoutine.groups[gi].exercises[xi];x[k]=!x[k];openRoutineEditor();}
+function excToggle(gi,xi,k){var x=editingRoutine.groups[gi].exercises[xi];x[k]=!x[k];openBlockEditor(gi);}
 function setKind(gi,kind){var g=editingRoutine.groups[gi];g.kind=kind;
   if(kind==='fast50'&&!g.ladder)g.ladder='14/12/10/8/6';
   if(kind==='standard'&&!g.rounds)g.rounds=3;
   if((kind==='timed'||kind==='superset')&&!g.rounds)g.rounds=1;
-  openRoutineEditor();}
-function addGroup(){editingRoutine.groups.push({id:uid(),kind:'standard',label:'',rounds:3,timeCap:'',rest:DB.settings.rest,ladder:'',exercises:[]});openRoutineEditor();}
+  openBlockEditor(gi);}
+function addGroup(){editingRoutine.groups.push({id:uid(),kind:'standard',label:'',rounds:3,timeCap:'',rest:DB.settings.rest,ladder:'',exercises:[]});beScroll=0;openBlockEditor(editingRoutine.groups.length-1);}
 function rmGroup(gi){editingRoutine.groups.splice(gi,1);openRoutineEditor();}
 function moveGroup(gi,dir){var a=editingRoutine.groups,j=gi+dir;if(j<0||j>=a.length)return;var t=a[gi];a[gi]=a[j];a[j]=t;openRoutineEditor();}
-function rmExc(gi,xi){editingRoutine.groups[gi].exercises.splice(xi,1);openRoutineEditor();}
+function rmExc(gi,xi){editingRoutine.groups[gi].exercises.splice(xi,1);openBlockEditor(gi);}
 function addExcToGroup(gi){pickerGroup=gi;openExPicker('routine');}
 function saveRoutine(){
   if(!editingRoutine.name.trim()){alert('Give the routine a name.');return;}
@@ -605,7 +639,7 @@ function renderPicker(){
 }
 function pickExercise(id){
   if(pickerTarget==='active'){DB.active.items.push({gid:'',gkind:'standard',glabel:'',gcap:0,rest:DB.settings.rest,exId:id,reps:'',weight:'',rir:'',oneHalf:false,dropSet:false,notes:'',sets:[{weight:'',reps:'',done:false,tReps:'',half:false}]});saveQuiet();closeModal();renderActive();}
-  else if(pickerTarget==='routine'){editingRoutine.groups[pickerGroup].exercises.push({exId:id,reps:'',weight:'',rir:'',oneHalf:false,dropSet:false,notes:''});closeModal();openRoutineEditor();}
+  else if(pickerTarget==='routine'){editingRoutine.groups[pickerGroup].exercises.push({exId:id,reps:'',weight:'',rir:'',oneHalf:false,dropSet:false,notes:''});openBlockEditor(pickerGroup);}
 }
 function addCustomExercise(){
   var name=prompt('Exercise name:');if(!name||!name.trim())return;
