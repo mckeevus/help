@@ -74,6 +74,39 @@
   .band-chips{display:flex;flex-wrap:wrap;gap:6px;margin:-2px 0 8px;}
   .band-chip{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted);border:1px solid var(--line);border-radius:100px;padding:5px 10px 5px 7px;background:var(--card);}
   .band-chip .dot{width:13px;height:13px;border-radius:50%;flex:none;}
+  .histseg{margin:0 0 14px;}
+  .metricpills{display:flex;gap:8px;margin:12px 0 10px;}
+  .metricpills button{flex:1;padding:8px;border-radius:100px;font-size:13px;font-weight:600;color:var(--muted);background:var(--bg);border:1px solid var(--line);}
+  .metricpills button.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .chart-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 14px 10px;margin-bottom:6px;}
+  .chart-card .ch-top{display:flex;align-items:baseline;gap:8px;margin-bottom:2px;}
+  .chart-card .ch-big{font-size:22px;font-weight:800;letter-spacing:-.01em;}
+  .chart-card .ch-date{font-size:13px;font-weight:600;color:var(--accent);}
+  .chart-svg{width:100%;height:150px;display:block;margin-top:6px;}
+  .chart-x{display:flex;justify-content:space-between;font-size:10px;color:var(--faint);font-weight:600;margin-top:2px;}
+  .wkcard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:15px 16px;margin-bottom:12px;}
+  .wkcard:active{background:var(--bg);}
+  .wk-h{display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;}
+  .wk-title{font-weight:800;font-size:17px;letter-spacing:-.01em;flex:1;}
+  .wk-date{font-size:12px;color:var(--faint);font-weight:600;white-space:nowrap;padding-top:3px;}
+  .wk-stats{display:flex;gap:18px;padding-bottom:12px;margin-bottom:10px;border-bottom:1px solid var(--line);}
+  .wk-stats .k{font-size:11px;color:var(--faint);font-weight:600;margin-bottom:2px;}
+  .wk-stats .v{font-size:15px;font-weight:700;}
+  .wk-ex{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:14px;}
+  .wk-ex .cnt{color:var(--muted);font-weight:600;min-width:42px;}
+  .wk-ex .nm{font-weight:600;}
+  .wk-ex .dot{width:8px;height:8px;border-radius:50%;flex:none;}
+  .wk-more{font-size:13px;color:var(--accent);font-weight:600;margin-top:6px;}
+  .body-big{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px;text-align:center;}
+  .body-big .n{font-size:34px;font-weight:800;letter-spacing:-.02em;}
+  .body-big .l{font-size:12px;color:var(--muted);font-weight:600;margin-top:2px;}
+  .body-big .delta{font-size:13px;font-weight:700;margin-top:4px;}
+  .delta.up{color:#16a34a;}.delta.down{color:#dc2626;}.delta.flat{color:var(--faint);}
+  .meas-row{display:flex;align-items:center;gap:12px;padding:13px 14px;background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;}
+  .meas-row .nm{font-weight:600;font-size:14px;flex:1;}
+  .meas-row .val{font-weight:700;font-size:15px;}
+  .meas-row .dl{font-size:12px;font-weight:700;min-width:54px;text-align:right;}
+  .be-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;}
 
   .nav{position:absolute;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding:8px 6px calc(8px + env(safe-area-inset-bottom));z-index:20;}
   .nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--faint);font-size:10px;font-weight:600;padding:4px;}
@@ -189,9 +222,14 @@
 
   <div class="screen" id="s-history">
     <div class="topbar"><div><h1>History</h1><div class="sub" id="hist-sub"></div></div><button class="gear" onclick="openSettings()">⚙</button></div>
-    <div class="stat-grid" id="hist-stats"></div>
-    <div class="sec-label">Past workouts</div>
-    <div id="hist-list"></div>
+    <div class="seg histseg"><button id="ht-workouts" class="on" onclick="histTab('workouts')">Workouts</button><button id="ht-body" onclick="histTab('body')">Body</button></div>
+    <div id="hist-workouts-view">
+      <div class="stat-grid" id="hist-stats"></div>
+      <div id="hist-chart"></div>
+      <div class="sec-label">Past workouts</div>
+      <div id="hist-list"></div>
+    </div>
+    <div id="hist-body-view" style="display:none"></div>
   </div>
 
   <div class="screen" id="s-exercises">
@@ -241,6 +279,18 @@ var BANDS=[
   {key:'green', name:'Green', color:'#2fa14e',lo:20,hi:55,kg:38}
 ];
 function bandByKey(k){for(var i=0;i<BANDS.length;i++){if(BANDS[i].key===k)return BANDS[i];}return null;}
+var MEASURES=[
+  {key:'weight',label:'Weight',unit:'kg'},
+  {key:'chest',label:'Chest',unit:'cm'},
+  {key:'waist',label:'Waist',unit:'cm'},
+  {key:'hips',label:'Hips',unit:'cm'},
+  {key:'shoulders',label:'Shoulders',unit:'cm'},
+  {key:'neck',label:'Neck',unit:'cm'},
+  {key:'bicepL',label:'Left Arm',unit:'cm'},{key:'bicepR',label:'Right Arm',unit:'cm'},
+  {key:'forearmL',label:'Left Forearm',unit:'cm'},{key:'forearmR',label:'Right Forearm',unit:'cm'},
+  {key:'thighL',label:'Left Thigh',unit:'cm'},{key:'thighR',label:'Right Thigh',unit:'cm'},
+  {key:'calfL',label:'Left Calf',unit:'cm'},{key:'calfR',label:'Right Calf',unit:'cm'}
+];
 var DB=loadDB();
 function loadDB(){
   try{var d=JSON.parse(localStorage.getItem(KEY));}catch(e){d=null;}
@@ -249,6 +299,7 @@ function loadDB(){
   if(!d.routines) d.routines=[];
   if(!d.blocks) d.blocks=[];
   if(!d.history) d.history=[];
+  if(!d.body) d.body=[];
   if(!d.settings) d.settings={};
   var s=d.settings; if(!s.units)s.units='kg'; if(!s.rest)s.rest=90;
   if(!s.syncUrl)s.syncUrl='https://aedzmfogyiusxnvezqgu.supabase.co'; if(!s.syncKey)s.syncKey='sb_publishable_1SIeZ5LgzTibvAf6Vmt3YA_KrCaSuyi'; if(s.syncCode===undefined)s.syncCode='';
@@ -684,22 +735,124 @@ function addCustomExercise(){
 }
 
 /* ───────── history ───────── */
+var MUSCLE_COLORS={Chest:'#ef4444',Back:'#3b82f6',Legs:'#8b5cf6',Shoulders:'#f59e0b',Arms:'#10b981',Core:'#ec4899',Cardio:'#06b6d4'};
+function muscleColor(m){return MUSCLE_COLORS[m]||'#94a3b8';}
+function chartSVG(vals){
+  if(!vals.length)return '';
+  var W=320,H=150,padT=12,padB=6;
+  var max=Math.max.apply(null,vals),min=Math.min.apply(null,vals),rawMin=min;
+  if(max===min){max=max+1;min=min-1;}
+  var pad=(max-min)*0.12;max+=pad;min-=pad;if(min<0&&rawMin>=0)min=0;
+  var rng=(max-min)||1,ih=H-padT-padB;
+  function X(i){return vals.length>1?(i/(vals.length-1))*W:W/2;}
+  function Y(v){return padT+ih-((v-min)/rng)*ih;}
+  var grid='';for(var g=0;g<3;g++){var gy=padT+ih*(g/2);grid+='<line x1="0" y1="'+gy.toFixed(1)+'" x2="'+W+'" y2="'+gy.toFixed(1)+'" stroke="#eef0f3" stroke-width="1" vector-effect="non-scaling-stroke"/>';}
+  var line=vals.map(function(v,i){return X(i).toFixed(1)+','+Y(v).toFixed(1);}).join(' ');
+  var area='M'+X(0).toFixed(1)+','+Y(vals[0]).toFixed(1)+' '+vals.map(function(v,i){return 'L'+X(i).toFixed(1)+','+Y(v).toFixed(1);}).join(' ')+' L'+X(vals.length-1).toFixed(1)+','+(padT+ih).toFixed(1)+' L'+X(0).toFixed(1)+','+(padT+ih).toFixed(1)+' Z';
+  return '<svg class="chart-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'+grid+'<path d="'+area+'" fill="#2563eb" opacity="0.08"/><polyline fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" points="'+line+'"/></svg>';
+}
+function metricVal(w){var vol=0,reps=0,sets=0;(w.items||[]).forEach(function(it){(it.sets||[]).forEach(function(s){sets++;vol+=(parseFloat(s.weight)||0)*(parseInt(s.reps)||0);reps+=parseInt(s.reps)||0;});});return {volume:vol,duration:w.duration||0,reps:reps,sets:sets};}
+function fmtMetric(m,v){if(m==='volume')return Math.round(v).toLocaleString()+' '+u();if(m==='duration')return fmtClock(v);return Math.round(v)+' reps';}
+var histMetric='volume';
+function setHistMetric(m){histMetric=m;renderWorkoutChart();}
+function renderWorkoutChart(){
+  var el=document.getElementById('hist-chart');if(!el)return;
+  var ws=DB.history.slice().sort(function(a,b){return a.date-b.date;});
+  if(ws.length<2){el.innerHTML='';return;}
+  var recent=ws.slice(-14);
+  var vals=recent.map(function(w){return metricVal(w)[histMetric];});
+  var pills='<div class="metricpills">'+['volume','duration','reps'].map(function(m){return '<button class="'+(histMetric===m?'on':'')+'" onclick="setHistMetric(\''+m+'\')">'+m.charAt(0).toUpperCase()+m.slice(1)+'</button>';}).join('')+'</div>';
+  el.innerHTML='<div class="chart-card"><div class="ch-top"><span class="ch-big">'+fmtMetric(histMetric,vals[vals.length-1])+'</span><span class="ch-date">'+fmtDate(recent[recent.length-1].date)+'</span></div>'+
+    chartSVG(vals)+'<div class="chart-x"><span>'+fmtDate(recent[0].date)+'</span><span>'+fmtDate(recent[recent.length-1].date)+'</span></div>'+pills+'</div>';
+}
+function histTab(t){
+  document.getElementById('ht-workouts').classList.toggle('on',t==='workouts');
+  document.getElementById('ht-body').classList.toggle('on',t==='body');
+  document.getElementById('hist-workouts-view').style.display=t==='workouts'?'':'none';
+  document.getElementById('hist-body-view').style.display=t==='body'?'':'none';
+  if(t==='body')renderBody();
+}
 function renderHistory(){
-  var c=document.getElementById('hist-list');
   document.getElementById('hist-sub').textContent=DB.history.length+' workouts';
   var totalVol=0,totalSets=0;
-  DB.history.forEach(function(w){w.items.forEach(function(it){it.sets.forEach(function(s){totalSets++;totalVol+=s.weight*s.reps;});});});
+  DB.history.forEach(function(w){w.items.forEach(function(it){it.sets.forEach(function(s){totalSets++;totalVol+=(parseFloat(s.weight)||0)*(parseInt(s.reps)||0);});});});
   document.getElementById('hist-stats').innerHTML=
     '<div class="stat-box"><div class="n">'+DB.history.length+'</div><div class="l">Workouts</div></div>'+
     '<div class="stat-box"><div class="n">'+Math.round(totalVol/1000)+'k</div><div class="l">Vol ('+u()+')</div></div>'+
     '<div class="stat-box"><div class="n">'+totalSets+'</div><div class="l">Total sets</div></div>';
+  renderWorkoutChart();
+  var c=document.getElementById('hist-list');
   if(!DB.history.length){c.innerHTML='<div class="empty"><div class="big">📈</div>No workouts yet.</div>';return;}
-  c.innerHTML=DB.history.map(function(w){
-    var vol=0,sets=0;w.items.forEach(function(it){it.sets.forEach(function(s){sets++;vol+=s.weight*s.reps;});});
-    var pr=(w.prs&&w.prs.length)?'<span class="pr-badge">🏆 '+w.prs.length+' PB</span>':'';
-    return '<div class="listitem" onclick="viewWorkout(\''+w.id+'\')"><div class="grow"><div class="t">'+esc(w.name)+pr+'</div><div class="s">'+fmtDate(w.date)+' · '+fmtClock(w.duration)+' · '+Math.round(vol).toLocaleString()+' '+u()+'</div></div><span class="chev">›</span></div>';
+  var ws=DB.history.slice().sort(function(a,b){return b.date-a.date;});
+  c.innerHTML=ws.map(function(w){
+    var mv=metricVal(w);
+    var prCount=(w.prs&&w.prs.length)||0;
+    var exrows=w.items.slice(0,3).map(function(it){var e=exById(it.exId);var n=(it.sets||[]).length;return '<div class="wk-ex"><span class="dot" style="background:'+muscleColor(e?e.muscle:'')+'"></span><span class="cnt">'+n+' set'+(n!==1?'s':'')+'</span><span class="nm">'+esc(e?e.name:'?')+'</span></div>';}).join('');
+    var moreN=w.items.length-3;
+    var more=moreN>0?'<div class="wk-more">See '+moreN+' more exercise'+(moreN!==1?'s':'')+'</div>':'';
+    var rec=prCount?'<div><div class="k">Records</div><div class="v">🏅 '+prCount+'</div></div>':'';
+    return '<div class="wkcard" onclick="viewWorkout(\''+w.id+'\')"><div class="wk-h"><div class="wk-title">'+esc(w.name)+'</div><div class="wk-date">'+fmtDate(w.date)+'</div></div>'+
+      '<div class="wk-stats"><div><div class="k">Time</div><div class="v">'+fmtClock(w.duration||0)+'</div></div><div><div class="k">Volume</div><div class="v">'+Math.round(mv.volume).toLocaleString()+' '+u()+'</div></div>'+rec+'</div>'+
+      exrows+more+'</div>';
   }).join('');
 }
+/* ───────── body composition ───────── */
+function bodyEntries(){return (DB.body||[]).slice().sort(function(a,b){return a.date-b.date;});}
+function measureSeries(key){return bodyEntries().filter(function(e){return e.vals&&e.vals[key]!=null&&e.vals[key]!=='';});}
+function deltaHtml(cur,prev){if(prev==null)return '<span class="dl">&nbsp;</span>';var d=Math.round((cur-prev)*10)/10;var cls=d>0?'up':d<0?'down':'flat';return '<span class="dl delta '+cls+'">'+(d>0?'+':'')+d+'</span>';}
+function renderBody(){
+  var v=document.getElementById('hist-body-view');if(!v)return;
+  var es=bodyEntries();
+  if(!es.length){v.innerHTML='<div class="empty" style="padding:30px 10px"><div class="big">⚖️</div>No measurements yet.<div class="s" style="margin-top:6px">Track bodyweight and measurements over time.</div></div><button class="btn" onclick="openBodyEntry()">＋ Log measurement</button>';return;}
+  var ws=measureSeries('weight');
+  var head='';
+  if(ws.length){
+    var cur=ws[ws.length-1].vals.weight, prev=ws.length>1?ws[ws.length-2].vals.weight:null;
+    var dtxt='';if(prev!=null){var d=Math.round((cur-prev)*10)/10;var cls=d>0?'up':d<0?'down':'flat';dtxt='<div class="delta '+cls+'">'+(d>0?'+':'')+d+' kg since last</div>';}
+    head='<div class="body-big"><div class="n">'+cur+' kg</div><div class="l">Bodyweight · '+fmtDate(ws[ws.length-1].date)+'</div>'+dtxt+'</div>';
+    if(ws.length>1)head+='<div class="chart-card"><div class="ch-top"><span class="ch-big">'+cur+' kg</span><span class="ch-date">weight</span></div>'+chartSVG(ws.map(function(e){return e.vals.weight;}))+'<div class="chart-x"><span>'+fmtDate(ws[0].date)+'</span><span>'+fmtDate(ws[ws.length-1].date)+'</span></div></div>';
+  }
+  var rows=MEASURES.filter(function(m){return m.key!=='weight';}).map(function(m){
+    var s=measureSeries(m.key);if(!s.length)return '';
+    var cur=s[s.length-1].vals[m.key],prev=s.length>1?s[s.length-2].vals[m.key]:null;
+    return '<div class="meas-row" onclick="viewMeasure(\''+m.key+'\')"><span class="nm">'+m.label+'</span><span class="val">'+cur+' '+m.unit+'</span>'+deltaHtml(cur,prev)+'</div>';
+  }).join('');
+  v.innerHTML='<button class="btn" style="margin-bottom:14px" onclick="openBodyEntry()">＋ Log measurement</button>'+head+
+    (rows?'<div class="sec-label">Latest measurements</div>'+rows:'')+
+    '<div class="sec-label">Entries</div>'+es.slice().reverse().map(function(e){return '<div class="listitem" onclick="openBodyEntry(\''+e.id+'\')"><div class="grow"><div class="t">'+((e.vals.weight!=null&&e.vals.weight!=='')?e.vals.weight+' kg':'Measurement')+'</div><div class="s">'+fmtDate(e.date)+'</div></div><span class="chev">›</span></div>';}).join('');
+}
+function viewMeasure(key){
+  var m=MEASURES.filter(function(x){return x.key===key;})[0];if(!m)return;
+  var s=measureSeries(key),vals=s.map(function(e){return e.vals[key];});
+  var hist=s.slice().reverse().map(function(e){return '<div class="listitem"><div class="grow"><div class="t">'+e.vals[key]+' '+m.unit+'</div><div class="s">'+fmtDate(e.date)+'</div></div></div>';}).join('');
+  openModal('<div class="sheet-head"><h3>'+m.label+'</h3><button class="close" onclick="closeModal()">✕</button></div><div class="sheet-body">'+
+    (vals.length>1?'<div class="chart-card"><div class="ch-top"><span class="ch-big">'+vals[vals.length-1]+' '+m.unit+'</span><span class="ch-date">'+fmtDate(s[s.length-1].date)+'</span></div>'+chartSVG(vals)+'<div class="chart-x"><span>'+fmtDate(s[0].date)+'</span><span>'+fmtDate(s[s.length-1].date)+'</span></div></div>':'')+
+    '<div class="sec-label">History</div>'+(hist||'<div class="empty" style="padding:20px">No data</div>')+'</div>');
+}
+var editingBodyId=null;
+function openBodyEntry(id){
+  editingBodyId=id||null;
+  var entry=id?(DB.body.filter(function(e){return e.id===id;})[0]||{}):{};
+  var vals=entry.vals||{};
+  var dt=entry.date?new Date(entry.date):new Date();
+  var dstr=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+  var fields=MEASURES.map(function(m){return '<div class="field"><label>'+m.label+' ('+m.unit+')</label><input type="number" inputmode="decimal" id="bm-'+m.key+'" value="'+(vals[m.key]!=null?vals[m.key]:'')+'" placeholder="–"></div>';}).join('');
+  var del=id?'<button class="btn ghost red" style="margin-top:10px" onclick="deleteBodyEntry(\''+id+'\')">Delete entry</button>':'';
+  openModal('<div class="sheet-head"><h3>'+(id?'Edit':'Log')+' measurement</h3><button class="close" onclick="closeModal()">✕</button></div><div class="sheet-body">'+
+    '<div class="field"><label>Date</label><input type="date" id="bm-date" value="'+dstr+'"></div>'+
+    '<div class="be-grid">'+fields+'</div>'+
+    '<button class="btn" style="margin-top:14px" onclick="saveBodyEntry()">Save</button>'+del+'</div>');
+}
+function saveBodyEntry(){
+  var dstr=document.getElementById('bm-date').value;
+  var date=dstr?new Date(dstr+'T12:00:00').getTime():Date.now();
+  var vals={};MEASURES.forEach(function(m){var raw=document.getElementById('bm-'+m.key).value;if(raw!==''&&raw!=null){var n=parseFloat(raw);if(!isNaN(n))vals[m.key]=n;}});
+  if(editingBodyId){var e=DB.body.filter(function(x){return x.id===editingBodyId;})[0];if(e){e.date=date;e.vals=vals;}}
+  else{DB.body.push({id:uid(),date:date,vals:vals});}
+  DB.body.sort(function(a,b){return a.date-b.date;});
+  save();closeModal();renderBody();
+}
+function deleteBodyEntry(id){if(!confirm('Delete this entry?'))return;DB.body=DB.body.filter(function(x){return x.id!==id;});save();closeModal();renderBody();}
 function viewWorkout(id){
   var w=DB.history.filter(function(x){return x.id===id;})[0];if(!w)return;
   var body=w.items.map(function(it){
@@ -812,6 +965,7 @@ function syncNow(silent){
   fetch(url,{headers:sbHeaders()}).then(function(r){return r.json();}).then(function(rows){
     var d=(rows&&rows[0]&&rows[0].data)||{};
     DB.history=mergeById(DB.history,d.history,'id');
+    DB.body=mergeById(DB.body,d.body,'id');DB.body.sort(function(a,b){return a.date-b.date;});
     DB.routines=mergeById(DB.routines,d.routines,'id');DB.routines.forEach(migrateRoutine);
     DB.blocks=mergeById(DB.blocks,d.blocks,'id');
     DB.exercises=mergeById(DB.exercises,d.exercises,'id');
@@ -821,12 +975,12 @@ function syncNow(silent){
   }).catch(function(e){if(!silent)toast('Sync failed — check connection');});
 }
 function pushSync(silent){
-  var payload={code:DB.settings.syncCode,data:{exercises:DB.exercises,routines:DB.routines,blocks:DB.blocks,history:DB.history,settings:DB.settings},updated_at:DB.updatedAt||Date.now()};
+  var payload={code:DB.settings.syncCode,data:{exercises:DB.exercises,routines:DB.routines,blocks:DB.blocks,history:DB.history,body:DB.body,settings:DB.settings},updated_at:DB.updatedAt||Date.now()};
   fetch(DB.settings.syncUrl+'/rest/v1/lift_sync',{method:'POST',headers:Object.assign(sbHeaders(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(payload)})
     .then(function(r){if(!r.ok)throw 0;DB.settings.lastSync=Date.now();saveQuiet();if(!silent)toast('Synced ✓ '+DB.history.length+' workouts');})
     .catch(function(e){if(!silent)toast('Sync push failed');});
 }
-function refreshAll(){var act=document.querySelector('.screen.active');renderWorkoutHome();renderRoutines();renderHistory();renderExercises();}
+function refreshAll(){var act=document.querySelector('.screen.active');renderWorkoutHome();renderRoutines();renderHistory();renderExercises();var bv=document.getElementById('hist-body-view');if(bv&&bv.style.display!=='none')renderBody();}
 
 function doExport(){
   var blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
