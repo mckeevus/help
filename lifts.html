@@ -64,6 +64,16 @@
   .check{width:34px;height:38px;border-radius:9px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--faint);background:var(--bg);}
   .set-row.done .check{background:var(--green);color:#fff;border-color:var(--green);}
   .addset{font-size:13px;font-weight:600;color:var(--accent);padding:9px;text-align:center;border:1px dashed var(--line);border-radius:9px;margin-top:6px;}
+  .wcell{position:relative;}
+  .wcell input{padding-right:24px;}
+  .bandbtn{position:absolute;right:5px;top:50%;transform:translateY(-50%);width:16px;height:16px;border-radius:50%;border:2px solid var(--line);background:#fff;padding:0;box-shadow:0 0 0 2px var(--bg);}
+  .bandrow{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--line);}
+  .bandrow:active{background:var(--bg);}
+  .bandrow .t{font-weight:700;font-size:15px;}.bandrow .mg{font-size:12px;color:var(--muted);}
+  .bandsw{width:30px;height:30px;border-radius:8px;flex:none;}
+  .band-chips{display:flex;flex-wrap:wrap;gap:6px;margin:-2px 0 8px;}
+  .band-chip{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted);border:1px solid var(--line);border-radius:100px;padding:5px 10px 5px 7px;background:var(--card);}
+  .band-chip .dot{width:13px;height:13px;border-radius:50%;flex:none;}
 
   .nav{position:absolute;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding:8px 6px calc(8px + env(safe-area-inset-bottom));z-index:20;}
   .nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--faint);font-size:10px;font-weight:600;padding:4px;}
@@ -223,6 +233,14 @@
 <script>
 /* ───────── data ───────── */
 var KEY='lifts_db_v1';
+var BANDS=[
+  {key:'yellow',name:'Yellow',color:'#f2b01e',lo:2.5,hi:7,kg:5},
+  {key:'red',   name:'Red',   color:'#d8392f',lo:5, hi:15,kg:10},
+  {key:'black', name:'Black', color:'#222a32',lo:13,hi:27,kg:20},
+  {key:'purple',name:'Purple',color:'#54388a',lo:18,hi:36,kg:27},
+  {key:'green', name:'Green', color:'#2fa14e',lo:20,hi:55,kg:38}
+];
+function bandByKey(k){for(var i=0;i<BANDS.length;i++){if(BANDS[i].key===k)return BANDS[i];}return null;}
 var DB=loadDB();
 function loadDB(){
   try{var d=JSON.parse(localStorage.getItem(KEY));}catch(e){d=null;}
@@ -387,7 +405,8 @@ function renderExItem(ei,inlineLabel){
   it.sets.forEach(function(s,si){
     rows+='<div class="set-grid set-row'+(s.done?' done':'')+(s.half?' drop':'')+'">'+
       '<div class="set-num'+(s.half?' drop':'')+'">'+(s.half?'½×2':(si+1))+'</div>'+
-      '<input type="number" inputmode="decimal" value="'+(s.weight!==''?s.weight:'')+'" placeholder="0" oninput="setVal('+ei+','+si+',\'weight\',this.value)">'+
+      '<div class="wcell"><input type="number" inputmode="decimal" value="'+(s.weight!==''?s.weight:'')+'" placeholder="0" oninput="setVal('+ei+','+si+',\'weight\',this.value)">'+
+        '<button class="bandbtn" title="Pick band"'+(s.band?(' style="background:'+(bandByKey(s.band)||{}).color+';border-color:transparent"'):'')+' onclick="openBandPicker('+ei+','+si+')"></button></div>'+
       '<input type="number" inputmode="numeric" value="'+(s.reps!==''?s.reps:'')+'" placeholder="'+(s.tReps||'0')+'" oninput="setVal('+ei+','+si+',\'reps\',this.value)">'+
       '<button class="check" onclick="toggleSet('+ei+','+si+')">'+(s.done?'✓':'○')+'</button></div>';
   });
@@ -494,11 +513,12 @@ function excFields(gi,xi,x,kind){
   var e=exById(x.exId);
   var h='<div class="exc-edit"><div class="eh"><span class="nm">'+esc(e?e.name:'?')+'</span><button class="x" onclick="rmExc('+gi+','+xi+')">✕</button></div>';
   if(kind==='fast50'){
-    h+='<label>Load / band</label><input value="'+esc(x.weight||'')+'" oninput="excSet('+gi+','+xi+',\'weight\',this.value)">';
+    h+='<label>Load / band</label><input value="'+esc(x.weight||'')+'" oninput="excSet('+gi+','+xi+',\'weight\',this.value)">'+excBandChips(gi,xi);
   }else{
     h+='<div class="three"><div><label>Reps</label><input placeholder="8-12" value="'+esc(x.reps||'')+'" oninput="excSet('+gi+','+xi+',\'reps\',this.value)"></div>'+
       '<div><label>Load</label><input placeholder="50% 12RM" value="'+esc(x.weight||'')+'" oninput="excSet('+gi+','+xi+',\'weight\',this.value)"></div>'+
       '<div><label>RIR</label><input placeholder="2" value="'+esc(x.rir||'')+'" oninput="excSet('+gi+','+xi+',\'rir\',this.value)"></div></div>'+
+      excBandChips(gi,xi)+
       '<div class="tpills"><button class="tpill'+(x.oneHalf?' on':'')+'" onclick="excToggle('+gi+','+xi+',\'oneHalf\')">1½ rep</button>'+
       '<button class="tpill'+(x.dropSet?' on':'')+'" onclick="excToggle('+gi+','+xi+',\'dropSet\')">Drop set (½ wt ×2)</button></div>';
   }
@@ -597,6 +617,8 @@ function deleteSavedBlock(libId){
 }
 function grpSet(gi,k,v){editingRoutine.groups[gi][k]=v;}
 function excSet(gi,xi,k,v){editingRoutine.groups[gi].exercises[xi][k]=v;}
+function excBandChips(gi,xi){return '<div class="band-chips">'+BANDS.map(function(b){return '<button class="band-chip" onclick="excBand('+gi+','+xi+',\''+b.key+'\')"><span class="dot" style="background:'+b.color+'"></span>'+b.name+'</button>';}).join('')+'</div>';}
+function excBand(gi,xi,key){var b=bandByKey(key);editingRoutine.groups[gi].exercises[xi].weight=b.name+' band';openBlockEditor(gi);}
 function excToggle(gi,xi,k){var x=editingRoutine.groups[gi].exercises[xi];x[k]=!x[k];openBlockEditor(gi);}
 function setKind(gi,kind){var g=editingRoutine.groups[gi];g.kind=kind;
   if(kind==='fast50'&&!g.ladder)g.ladder='14/12/10/8/6';
@@ -641,6 +663,20 @@ function pickExercise(id){
   if(pickerTarget==='active'){DB.active.items.push({gid:'',gkind:'standard',glabel:'',gcap:0,rest:DB.settings.rest,exId:id,reps:'',weight:'',rir:'',oneHalf:false,dropSet:false,notes:'',sets:[{weight:'',reps:'',done:false,tReps:'',half:false}]});saveQuiet();closeModal();renderActive();}
   else if(pickerTarget==='routine'){editingRoutine.groups[pickerGroup].exercises.push({exId:id,reps:'',weight:'',rir:'',oneHalf:false,dropSet:false,notes:''});openBlockEditor(pickerGroup);}
 }
+function openBandPicker(ei,si){
+  var cur=DB.active.items[ei].sets[si].band||'';
+  var rows=BANDS.map(function(b){
+    return '<div class="bandrow" onclick="pickBand('+ei+','+si+',\''+b.key+'\')"><span class="bandsw" style="background:'+b.color+'"></span>'+
+      '<div class="grow"><div class="t">'+b.name+(cur===b.key?' ✓':'')+'</div><div class="mg">'+b.lo+'–'+b.hi+'kg · logs '+b.kg+'kg</div></div></div>';
+  }).join('');
+  rows+='<div class="bandrow" onclick="pickBand('+ei+','+si+',\'\')"><span class="bandsw" style="background:#fff;border:2px solid var(--line)"></span><div class="grow"><div class="t">No band</div><div class="mg">Clear band · type weight by hand</div></div></div>';
+  openModal('<div class="sheet-head"><h3>Choose band</h3><button class="close" onclick="closeModal()">✕</button></div><div class="sheet-body">'+rows+'</div>');
+}
+function pickBand(ei,si,key){
+  var s=DB.active.items[ei].sets[si];
+  if(key){var b=bandByKey(key);s.band=key;s.weight=String(b.kg);}else{s.band='';}
+  saveQuiet();closeModal();renderActive();
+}
 function addCustomExercise(){
   var name=prompt('Exercise name:');if(!name||!name.trim())return;
   var muscle=prompt('Muscle group (Chest, Back, Legs, Shoulders, Arms, Core, Cardio):','Other')||'Other';
@@ -668,7 +704,7 @@ function viewWorkout(id){
   var w=DB.history.filter(function(x){return x.id===id;})[0];if(!w)return;
   var body=w.items.map(function(it){
     var e=exById(it.exId);
-    var rows=it.sets.map(function(s,i){return '<div class="set-grid"><div class="set-num">'+(i+1)+'</div><div style="text-align:center;font-weight:600">'+s.weight+'</div><div style="text-align:center;font-weight:600">'+s.reps+'</div><div></div></div>';}).join('');
+    var rows=it.sets.map(function(s,i){var bd=s.band?(bandByKey(s.band)||{}):null;var bsw=bd?'<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+bd.color+';margin-right:5px;vertical-align:middle"></span>':'';return '<div class="set-grid"><div class="set-num">'+(i+1)+'</div><div style="text-align:center;font-weight:600">'+bsw+s.weight+'</div><div style="text-align:center;font-weight:600">'+s.reps+'</div><div></div></div>';}).join('');
     var gl=it.glabel?'<span class="glabel">'+esc(it.glabel)+'</span>':'';
     return '<div class="ex-block"><div class="ex-head">'+gl+'<div class="name">'+esc(e?e.name:'?')+'</div></div><div class="set-grid hdr"><div>Set</div><div>'+u()+'</div><div>Reps</div><div></div></div>'+rows+'</div>';
   }).join('');
