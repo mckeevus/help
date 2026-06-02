@@ -796,22 +796,34 @@ function syncConfigured(){var s=DB.settings;return s.syncUrl&&s.syncKey&&s.syncC
 var autoSyncTimer=null;
 function maybeAutoSync(){if(!syncConfigured())return;clearTimeout(autoSyncTimer);autoSyncTimer=setTimeout(function(){syncNow(true);},2500);}
 function sbHeaders(){return {'apikey':DB.settings.syncKey,'Authorization':'Bearer '+DB.settings.syncKey,'Content-Type':'application/json'};}
+function mergeById(a,b,k){a=a||[];b=b||[];var seen={},out=a.slice();a.forEach(function(x){if(x&&x[k]!=null)seen[x[k]]=1;});b.forEach(function(x){if(x&&x[k]!=null&&!seen[x[k]]){out.push(x);seen[x[k]]=1;}});return out;}
+function pruneExercises(){
+  var ref={};
+  DB.history.forEach(function(w){(w.items||[]).forEach(function(it){if(it.exId!=null)ref[it.exId]=1;});});
+  DB.routines.forEach(function(r){(r.groups||[]).forEach(function(g){(g.exercises||[]).forEach(function(x){if(x.exId!=null)ref[x.exId]=1;});});});
+  var keep=[],nameSeen={};
+  DB.exercises.forEach(function(e){if(ref[e.id]){keep.push(e);nameSeen[(e.name||'').toLowerCase()]=1;}});
+  DB.exercises.forEach(function(e){if(ref[e.id])return;var n=(e.name||'').toLowerCase();if(!nameSeen[n]){keep.push(e);nameSeen[n]=1;}});
+  DB.exercises=keep;
+}
 function syncNow(silent){
   if(!syncConfigured()){if(!silent){toast('Enter sync details first');}return;}
-  var url=DB.settings.syncUrl+'/rest/v1/lift_sync?code=eq.'+encodeURIComponent(DB.settings.syncCode)+'&select=data,updated_at';
+  var url=DB.settings.syncUrl+'/rest/v1/lift_sync?code=eq.'+encodeURIComponent(DB.settings.syncCode)+'&select=data';
   fetch(url,{headers:sbHeaders()}).then(function(r){return r.json();}).then(function(rows){
-    var remote=rows&&rows[0];
-    var localTs=DB.settings.lastSync?(DB.updatedAt||0):0;
-    if(remote&&remote.updated_at&&remote.updated_at>localTs){
-      var d=remote.data;DB.exercises=d.exercises||DB.exercises;DB.routines=(d.routines||[]);DB.routines.forEach(migrateRoutine);DB.blocks=d.blocks||[];DB.history=d.history||[];if(d.settings){d.settings.syncUrl=DB.settings.syncUrl;d.settings.syncKey=DB.settings.syncKey;d.settings.syncCode=DB.settings.syncCode;DB.settings=d.settings;}
-      DB.updatedAt=remote.updated_at;DB.settings.lastSync=Date.now();saveQuiet();refreshAll();if(!silent)toast('Pulled latest from cloud ⬇');
-    }else{pushSync(silent);}
-  }).catch(function(e){if(!silent)toast('Sync failed — check details');});
+    var d=(rows&&rows[0]&&rows[0].data)||{};
+    DB.history=mergeById(DB.history,d.history,'id');
+    DB.routines=mergeById(DB.routines,d.routines,'id');DB.routines.forEach(migrateRoutine);
+    DB.blocks=mergeById(DB.blocks,d.blocks,'id');
+    DB.exercises=mergeById(DB.exercises,d.exercises,'id');
+    pruneExercises();
+    DB.updatedAt=Date.now();saveQuiet();
+    pushSync(silent);refreshAll();
+  }).catch(function(e){if(!silent)toast('Sync failed — check connection');});
 }
 function pushSync(silent){
   var payload={code:DB.settings.syncCode,data:{exercises:DB.exercises,routines:DB.routines,blocks:DB.blocks,history:DB.history,settings:DB.settings},updated_at:DB.updatedAt||Date.now()};
   fetch(DB.settings.syncUrl+'/rest/v1/lift_sync',{method:'POST',headers:Object.assign(sbHeaders(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(payload)})
-    .then(function(r){if(!r.ok)throw 0;DB.settings.lastSync=Date.now();saveQuiet();if(!silent)toast('Synced to cloud ⬆');})
+    .then(function(r){if(!r.ok)throw 0;DB.settings.lastSync=Date.now();saveQuiet();if(!silent)toast('Synced ✓ '+DB.history.length+' workouts');})
     .catch(function(e){if(!silent)toast('Sync push failed');});
 }
 function refreshAll(){var act=document.querySelector('.screen.active');renderWorkoutHome();renderRoutines();renderHistory();renderExercises();}
