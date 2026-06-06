@@ -55,8 +55,9 @@
   .target-line{font-size:12px;color:var(--muted);margin:2px 0 10px;line-height:1.5;}
   .target-line b{color:var(--ink);}
   .note-line{font-size:12px;color:var(--muted);font-style:italic;margin:0 0 10px;line-height:1.5;}
-  .set-grid{display:grid;grid-template-columns:34px 1fr 1fr 44px;gap:8px;align-items:center;margin-bottom:7px;}
+  .set-grid{display:grid;grid-template-columns:28px 1fr 1fr 30px 38px;gap:7px;align-items:center;margin-bottom:7px;}
   .set-grid.hdr{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--faint);letter-spacing:.04em;margin-bottom:4px;}
+  .set-grid.hdr>div{text-align:center;}
   .set-grid input{width:100%;text-align:center;padding:10px 4px;border:1px solid var(--line);border-radius:9px;font-size:15px;font-weight:600;background:var(--bg);}
   .set-grid input:focus{outline:none;border-color:var(--accent);background:#fff;}
   .set-num{text-align:center;font-weight:700;color:var(--muted);font-size:14px;}
@@ -65,8 +66,13 @@
   .set-row.done .check{background:var(--green);color:#fff;border-color:var(--green);}
   .addset{font-size:13px;font-weight:600;color:var(--accent);padding:9px;text-align:center;border:1px dashed var(--line);border-radius:9px;margin-top:6px;}
   .wcell{position:relative;}
-  .wcell input{padding-right:24px;}
-  .bandbtn{position:absolute;right:5px;top:50%;transform:translateY(-50%);width:16px;height:16px;border-radius:50%;border:2px solid var(--line);background:#fff;padding:0;box-shadow:0 0 0 2px var(--bg);}
+  .wcell input{padding-right:40px;}
+  .bandbtn{position:absolute;right:4px;top:50%;transform:translateY(-50%);height:26px;padding:0 7px;border-radius:7px;border:1px solid var(--line);background:#fff;display:flex;align-items:center;gap:4px;font-size:10px;font-weight:800;letter-spacing:.02em;color:var(--muted);text-transform:uppercase;}
+  .bandbtn .bdot{width:9px;height:9px;border-radius:50%;background:var(--faint);flex:none;}
+  .set-bandchip{width:100%;height:38px;border-radius:9px;border:none;color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;}
+  .set-bandchip .pen{opacity:.85;font-size:12px;}
+  .failbtn{width:30px;height:38px;border-radius:9px;border:1px solid var(--line);background:var(--bg);color:var(--faint);font-weight:800;font-size:14px;}
+  .failbtn.on{background:var(--red);color:#fff;border-color:var(--red);}
   .bandrow{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--line);}
   .bandrow:active{background:var(--bg);}
   .bandrow .t{font-weight:700;font-size:15px;}.bandrow .mg{font-size:12px;color:var(--muted);}
@@ -216,7 +222,7 @@
   <div class="screen" id="s-routines">
     <div class="topbar"><div><h1>Routines</h1><div class="sub">Your programs</div></div><button class="gear" onclick="openSettings()">⚙</button></div>
     <button class="btn" onclick="newRoutine()">＋ New Routine</button>
-    <div class="sec-label">Saved routines</div>
+    <div class="sec-label">Saved routines — tap any to edit</div>
     <div id="rt-list"></div>
   </div>
 
@@ -395,14 +401,14 @@ function startFromRoutine(rid){
     if(kind==='fast50'){
       var ladder=parseLadder(g.ladder)||['14','12','10','8','6'];
       (g.exercises||[]).forEach(function(x){
-        var sets=ladder.map(function(rep){return {weight:'',reps:'',done:false,tReps:rep,half:false};});
+        var sets=ladder.map(function(rep){return {weight:'',reps:'',done:false,tReps:rep,half:false,band:'',fail:false};});
         items.push(mkItem(gid,kind,g,x,cap,sets));
       });
     }else{
       var rounds=Math.max(1,parseInt(g.rounds)||(kind==='standard'?3:1));
       (g.exercises||[]).forEach(function(x){
-        var ladder=parseLadder(x.reps),sets=[];
-        for(var i=0;i<rounds;i++)sets.push({weight:'',reps:'',done:false,tReps:ladder?ladder[Math.min(i,ladder.length-1)]:(x.reps||''),half:false});
+        var scheme=parseScheme(x.reps),sets=[];
+        for(var i=0;i<rounds;i++)sets.push({weight:'',reps:'',done:false,tReps:scheme?scheme[Math.min(i,scheme.length-1)]:(x.reps||''),half:false,band:'',fail:false});
         items.push(mkItem(gid,kind,g,x,cap,sets));
       });
     }
@@ -415,6 +421,11 @@ function parseLadder(text,n){
   var parts=String(text).split(/[\/,]/).map(function(s){return s.trim();});
   if(parts.length>=2 && parts.every(function(p){return /^\d+$/.test(p);}))return parts;
   return null;
+}
+function parseScheme(text){
+  if(!text)return null;
+  var parts=String(text).split(/[\/,]/).map(function(s){return s.trim();}).filter(Boolean);
+  return parts.length?parts:null;
 }
 function renderActive(){
   if(!DB.active){tab('workout');return;}
@@ -445,20 +456,30 @@ function renderExItem(ei,inlineLabel){
   var it=DB.active.items[ei],ex=exById(it.exId);
   var blk=document.createElement('div');blk.className='ex-block';
   var badges=(it.oneHalf?'<span class="sbadge">1½ rep</span>':'')+(it.dropSet?'<span class="sbadge">drop set</span>':'');
+  var lp=lastPerformed(it.exId);
   var tp=[];
-  if(it.reps)tp.push('<b>Reps:</b> '+esc(String(it.reps)));
   if(it.weight)tp.push('<b>Load:</b> '+esc(String(it.weight)));
   if(it.rir!==''&&it.rir!=null)tp.push('<b>RIR:</b> '+esc(String(it.rir)));
   if((it.gkind==='standard'||!it.gid)&&it.rest)tp.push('rest '+it.rest+'s');
   var tline=tp.length?'<div class="target-line">'+tp.join('  ·  ')+'</div>':'';
-  var note=it.notes?'<div class="note-line">'+esc(it.notes)+'</div>':'';
-  var rows='<div class="set-grid hdr"><div>Set</div><div>'+u()+'</div><div>Reps</div><div></div></div>';
+  var nbits=[];
+  if(it.reps)nbits.push('Suggested: '+esc(String(it.reps)));
+  if(it.notes)nbits.push(esc(it.notes));
+  var note=nbits.length?'<div class="note-line">'+nbits.join('  ·  ')+'</div>':'';
+  var rows='<div class="set-grid hdr"><div>Set</div><div>'+u()+'</div><div>Reps</div><div>F</div><div></div></div>';
   it.sets.forEach(function(s,si){
+    var prev=lp&&lp[si]?lp[si]:null;
+    var phW=s.band?'':(prev?(prev.band?(bandByKey(prev.band)||{}).name:String(prev.weight)):'0');
+    var phR=prev&&prev.reps?String(prev.reps)+(prev.fail?' F':''):(s.tReps||'0');
+    var wcell=s.band
+      ? '<div class="wcell"><button class="set-bandchip" style="background:'+((bandByKey(s.band)||{}).color||'#888')+'" onclick="openBandPicker('+ei+','+si+')">'+esc((bandByKey(s.band)||{}).name||'Band')+' <span class="pen">✎</span></button></div>'
+      : '<div class="wcell"><input type="number" inputmode="decimal" value="'+(s.weight!==''?s.weight:'')+'" placeholder="'+esc(phW)+'" oninput="setVal('+ei+','+si+',\'weight\',this.value)">'+
+        '<button class="bandbtn" onclick="openBandPicker('+ei+','+si+')"><span class="bdot"></span>Band</button></div>';
     rows+='<div class="set-grid set-row'+(s.done?' done':'')+(s.half?' drop':'')+'">'+
       '<div class="set-num'+(s.half?' drop':'')+'">'+(s.half?'½×2':(si+1))+'</div>'+
-      '<div class="wcell"><input type="number" inputmode="decimal" value="'+(s.weight!==''?s.weight:'')+'" placeholder="0" oninput="setVal('+ei+','+si+',\'weight\',this.value)">'+
-        '<button class="bandbtn" title="Pick band"'+(s.band?(' style="background:'+(bandByKey(s.band)||{}).color+';border-color:transparent"'):'')+' onclick="openBandPicker('+ei+','+si+')"></button></div>'+
-      '<input type="number" inputmode="numeric" value="'+(s.reps!==''?s.reps:'')+'" placeholder="'+(s.tReps||'0')+'" oninput="setVal('+ei+','+si+',\'reps\',this.value)">'+
+      wcell+
+      '<input type="number" inputmode="numeric" value="'+(s.reps!==''?s.reps:'')+'" placeholder="'+esc(phR)+'" oninput="setVal('+ei+','+si+',\'reps\',this.value)">'+
+      '<button class="failbtn'+(s.fail?' on':'')+'" onclick="toggleFail('+ei+','+si+')">F</button>'+
       '<button class="check" onclick="toggleSet('+ei+','+si+')">'+(s.done?'✓':'○')+'</button></div>';
   });
   var gl=inlineLabel?'<span class="glabel">'+esc(inlineLabel)+'</span>':'';
@@ -467,6 +488,13 @@ function renderExItem(ei,inlineLabel){
   return blk;
 }
 function setVal(ei,si,k,v){DB.active.items[ei].sets[si][k]=v;saveQuiet();updateAwBar();}
+function toggleFail(ei,si){var s=DB.active.items[ei].sets[si];s.fail=!s.fail;saveQuiet();renderActive();}
+function effKg(s){var w=parseFloat(s.weight);if(!isNaN(w)&&s.weight!=='')return w;if(s.band){var b=bandByKey(s.band);if(b)return b.kg;}return 0;}
+function lastPerformed(exId){
+  for(var i=0;i<DB.history.length;i++){var w=DB.history[i];
+    for(var j=0;j<w.items.length;j++){if(w.items[j].exId===exId)return w.items[j].sets;}}
+  return null;
+}
 function toggleSet(ei,si){
   var it=DB.active.items[ei],s=it.sets[si];s.done=!s.done;
   if(s.done&&it.dropSet&&!s.half){
@@ -483,7 +511,7 @@ function addSet(ei){var sets=DB.active.items[ei].sets;var last=sets[sets.length-
 function removeEx(ei){DB.active.items.splice(ei,1);saveQuiet();renderActive();}
 function updateAwBar(){
   if(!DB.active)return;var vol=0,sets=0;
-  DB.active.items.forEach(function(it){it.sets.forEach(function(s){if(s.done){sets++;vol+=(parseFloat(s.weight)||0)*(parseInt(s.reps)||0);}});});
+  DB.active.items.forEach(function(it){it.sets.forEach(function(s){if(s.done){sets++;vol+=effKg(s)*(parseInt(s.reps)||0);}});});
   document.getElementById('aw-volume').textContent=Math.round(vol).toLocaleString()+' '+u()+' · '+sets+' sets';
 }
 var awTimerInt=null;
@@ -495,7 +523,7 @@ function finishWorkout(){
   var done=[];
   DB.active.items.forEach(function(it){
     var ds=it.sets.filter(function(s){return s.done&&s.reps!=='';});
-    if(ds.length)done.push({exId:it.exId,glabel:it.glabel||'',gkind:it.gkind||'',sets:ds.map(function(s){return {weight:parseFloat(s.weight)||0,reps:parseInt(s.reps)||0,half:!!s.half};})});
+    if(ds.length)done.push({exId:it.exId,glabel:it.glabel||'',gkind:it.gkind||'',sets:ds.map(function(s){return {weight:effKg(s),reps:parseInt(s.reps)||0,half:!!s.half,band:s.band||'',fail:!!s.fail};})});
   });
   if(!done.length){if(!confirm('No completed sets. Finish anyway (won\'t be saved)?'))return;DB.active=null;save();stopRest();tab('workout');return;}
   var prs=detectPRs(done);
@@ -546,7 +574,7 @@ function renderRoutines(){
   c.innerHTML=DB.routines.map(function(r){
     var exs=[];(r.groups||[]).forEach(function(g){(g.exercises||[]).forEach(function(x){var e=exById(x.exId);if(e)exs.push(e.name);});});
     var names=exs.slice(0,4).join(', ');
-    return '<div class="listitem" onclick="editRoutine(\''+r.id+'\')"><div class="grow"><div class="t">'+esc(r.name)+'</div><div class="s">'+esc(names)+(exs.length>4?'…':'')+'</div></div><span class="chev">›</span></div>';
+    return '<div class="listitem" onclick="editRoutine(\''+r.id+'\')"><div class="grow"><div class="t">'+esc(r.name)+'</div><div class="s">'+esc(names)+(exs.length>4?'…':'')+'</div></div><span style="font-size:12px;font-weight:700;color:var(--accent);background:var(--accent-soft);padding:5px 10px;border-radius:100px;white-space:nowrap">Edit ✎</span></div>';
   }).join('');
 }
 var editingRoutine=null,pickerGroup=null;
@@ -725,7 +753,7 @@ function openBandPicker(ei,si){
 }
 function pickBand(ei,si,key){
   var s=DB.active.items[ei].sets[si];
-  if(key){var b=bandByKey(key);s.band=key;s.weight=String(b.kg);}else{s.band='';}
+  if(key){s.band=key;s.weight='';}else{s.band='';}
   saveQuiet();closeModal();renderActive();
 }
 function addCustomExercise(){
