@@ -582,6 +582,11 @@ button{
 .fc-fail.on .sw::after{transform:translateX(22px);}
 .fc-complete{background:var(--accent) !important;min-height:56px;font-size:17px;border-radius:18px;}
 .fc-hint{text-align:center;font-size:12px;color:var(--muted);margin-top:9px;}
+.amrap-clock{text-align:center;font-size:62px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin:8px 0 2px;color:var(--ink);}
+.amrap-clock.run{color:var(--accent);}
+.amrap-clock.done{color:var(--red);}
+.amrap-state{text-align:center;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:14px;}
+.amrap-go{background:var(--accent) !important;min-height:52px;font-size:16px;border-radius:16px;}
 .fc-done{text-align:center;padding:22px 10px;}
 .fc-done .big{font-size:42px;}
 .nextup{background:var(--card);border-radius:20px;padding:13px 14px;box-shadow:0 8px 20px rgba(15,23,42,.05);display:flex;align-items:center;gap:12px;margin-bottom:14px;}
@@ -741,7 +746,7 @@ function migrateRoutine(r){
   });
   delete r.items;delete r.blocks;
 }
-function kindLabel(k){return k==='timed'?'Timed':k==='superset'?'Superset':k==='fast50'?'Fast 50':'Straight';}
+function kindLabel(k){return k==='timed'?'Timed':k==='superset'?'Superset':k==='fast50'?'Fast 50':k==='amrap'?'AMRAP':'Straight';}
 function parseTime(s){if(!s)return 0;s=String(s).trim();var m=s.match(/^(\d+):(\d{1,2})$/);if(m)return parseInt(m[1])*60+parseInt(m[2]);m=s.match(/(\d+(?:\.\d+)?)\s*min/i);if(m)return Math.round(parseFloat(m[1])*60);if(/^\d+$/.test(s))return parseInt(s);return 0;}
 function save(){DB.updatedAt=Date.now();localStorage.setItem(KEY,JSON.stringify(DB));maybeAutoSync();}
 function saveQuiet(){localStorage.setItem(KEY,JSON.stringify(DB));}
@@ -818,6 +823,12 @@ function startFromRoutine(rid){
         var sets=ladder.map(function(rep){return {weight:'',reps:'',done:false,tReps:rep,half:false,band:'',fail:false};});
         items.push(mkItem(gid,kind,g,x,cap,sets));
       });
+    }else if(kind==='amrap'){
+      var amCap=cap||300;
+      (g.exercises||[]).forEach(function(x){
+        var sets=[{weight:'',reps:'',done:false,tReps:'',half:false,band:'',fail:false,amrap:true,ignition:'',endAt:null,tCap:amCap}];
+        items.push(mkItem(uid(),kind,g,x,amCap,sets));
+      });
     }else{
       var rounds=Math.max(1,parseInt(g.rounds)||(kind==='standard'?3:1));
       (g.exercises||[]).forEach(function(x){
@@ -864,6 +875,7 @@ function renderAwStats(){
 }
 function renderActive(){
   if(!DB.active){tab('workout');return;}
+  clearInterval(amrapInt);amrapInt=null;
   document.getElementById('aw-name').textContent=DB.active.name||'Workout';
   renderAwStats();
   var fc=document.getElementById('aw-focus'),nx=document.getElementById('aw-nextup');
@@ -876,6 +888,7 @@ function renderActive(){
     nx.innerHTML='';return;
   }
   var ei=cur.ei,si=cur.si,it=DB.active.items[ei],ex=exById(it.exId),s=it.sets[si];
+  if(it.gkind==='amrap'){fc.innerHTML=renderAmrapCard(ei,si,it,ex,s);nx.innerHTML=nextUpHtml(ei);manageAmrapTimer();return;}
   var prog=(ei+1)+' / '+DB.active.items.length;
   var scheme=s.tReps||it.reps;
   var subBits=[it.sets.length+' sets'];
@@ -921,6 +934,75 @@ function renderActive(){
     '<div class="fc-hint">Rest timer starts automatically</div></div>';
   nx.innerHTML=nextUpHtml(ei);
 }
+var amrapInt=null;
+function renderAmrapCard(ei,si,it,ex,s){
+  var prog=(ei+1)+' / '+DB.active.items.length;
+  var cap=s.tCap||300;
+  var running=s.endAt&&s.endAt>Date.now();
+  var ended=s.endAt&&s.endAt<=Date.now();
+  var remain=s.endAt?Math.max(0,Math.round((s.endAt-Date.now())/1000)):cap;
+  var lp=lastPerformed(it.exId),prev=lp&&lp[0]?lp[0]:null;
+  var prevReps=(prev&&prev.reps!=null)?prev.reps:null;
+  var prevTxt=prevReps!=null?(prevReps+' reps'+(prev.weight?' @ '+prev.weight+u():'')):'—';
+  var goalTxt=prevReps!=null?('Beat '+prevReps):'Set a baseline';
+  var subBits=['10–12 RM load','5 min effective reps'];
+  if(it.notes)subBits.push(esc(it.notes));
+  var clockCls='amrap-clock'+(ended?' done':'')+(running?' run':'');
+  var stateTxt=ended?'Time! Log your reps':(running?'Counting down — go ham':'Warm up with 10–12, then start');
+  var ctrl;
+  if(!s.endAt){ctrl='<button class="btn amrap-go" id="amrap-btn" onclick="amrapStart('+ei+','+si+')">▶ Start 5:00 clock</button>';}
+  else if(running){ctrl='<button class="btn ghost sm" id="amrap-btn" onclick="amrapReset('+ei+','+si+')">↺ Reset clock</button>';}
+  else{ctrl='<button class="btn ghost sm" id="amrap-btn" style="display:none" onclick="amrapReset('+ei+','+si+')">↺ Reset clock</button>';}
+  var wv=(s.weight!==''&&s.weight!=null)?s.weight:'';
+  var wsec='<div class="fc-sec"><div class="lab">Load ('+u()+') · your 10–12 rep max</div>'+
+    '<div class="stepper"><button class="pm" onclick="awStep('+ei+','+si+',\'weight\',-2.5)">−</button>'+
+    '<input type="number" inputmode="decimal" value="'+wv+'" placeholder="0" oninput="awInput('+ei+','+si+',\'weight\',this.value)">'+
+    '<button class="pm" onclick="awStep('+ei+','+si+',\'weight\',2.5)">+</button></div>'+
+    weightChips(ei,si,prev,it)+'</div>';
+  var igsec='<div class="fc-sec"><div class="lab">Ignition reps · warm-up, don\'t count</div>'+
+    '<div class="stepper"><button class="pm" onclick="awStep('+ei+','+si+',\'ignition\',-1)">−</button>'+
+    '<input type="number" inputmode="numeric" value="'+(s.ignition!==''&&s.ignition!=null?s.ignition:'')+'" placeholder="10" oninput="awInput('+ei+','+si+',\'ignition\',this.value)">'+
+    '<button class="pm" onclick="awStep('+ei+','+si+',\'ignition\',1)">+</button></div></div>';
+  var rv=(s.reps!==''&&s.reps!=null)?s.reps:0;
+  var rsec='<div class="fc-sec"><div class="lab">Effective reps · these count</div>'+
+    '<div class="stepper"><button class="pm" onclick="awStep('+ei+','+si+',\'reps\',-1)">−</button>'+
+    '<input type="number" inputmode="numeric" value="'+(s.reps!==''&&s.reps!=null?s.reps:'')+'" placeholder="0" oninput="awInput('+ei+','+si+',\'reps\',this.value)">'+
+    '<button class="pm" onclick="awStep('+ei+','+si+',\'reps\',1)">+</button></div></div>';
+  return '<div class="fc"><div class="fc-head"><span class="fc-prog">'+prog+'</span><span class="fc-name">'+esc(ex?ex.name:'Exercise')+'</span><button class="fc-edit" onclick="awJump()">☰</button></div>'+
+    '<div class="fc-sub">'+subBits.join('  ·  ')+'</div>'+
+    '<div class="'+clockCls+'" id="amrap-clock">'+fmtClock(remain)+'</div>'+
+    '<div class="amrap-state" id="amrap-state">'+stateTxt+'</div>'+
+    ctrl+
+    '<div class="fc-repspill" style="margin-top:14px"><span id="fc-repbig">'+rv+' reps</span></div>'+
+    '<div class="fc-pg"><div class="box prev"><div class="k">Previous</div><div class="v">'+prevTxt+'</div></div><div class="arrow">→</div><div class="box goal"><div class="k">Goal</div><div class="v">'+goalTxt+'</div></div></div>'+
+    wsec+igsec+rsec+
+    '<button class="btn fc-complete" onclick="completeCurrent()">✓ Log effective reps</button>'+
+    '<div class="fc-hint">2 min rest before the next exercise</div></div>';
+}
+function manageAmrapTimer(){
+  clearInterval(amrapInt);amrapInt=null;
+  var cur=awCurrent();if(!cur)return;
+  var it=DB.active.items[cur.ei];if(it.gkind!=='amrap')return;
+  var s=it.sets[cur.si];if(!s.endAt)return;
+  if(s.endAt<=Date.now())return;
+  amrapInt=setInterval(amrapTick,250);amrapTick();
+}
+function amrapTick(){
+  var cur=awCurrent();if(!cur){clearInterval(amrapInt);amrapInt=null;return;}
+  var it=DB.active.items[cur.ei];if(it.gkind!=='amrap'){clearInterval(amrapInt);amrapInt=null;return;}
+  var s=it.sets[cur.si],el=document.getElementById('amrap-clock');
+  if(!s.endAt||!el){clearInterval(amrapInt);amrapInt=null;return;}
+  var remain=Math.max(0,Math.round((s.endAt-Date.now())/1000));
+  el.textContent=fmtClock(remain);
+  if(remain<=0){
+    clearInterval(amrapInt);amrapInt=null;el.classList.add('done');el.classList.remove('run');
+    try{navigator.vibrate&&navigator.vibrate([300,120,300]);}catch(e){}
+    var st=document.getElementById('amrap-state');if(st)st.textContent='Time! Log your reps';
+    var btn=document.getElementById('amrap-btn');if(btn)btn.style.display='none';
+  }
+}
+function amrapStart(ei,si){var s=DB.active.items[ei].sets[si];s.endAt=Date.now()+((s.tCap||300)*1000);saveQuiet();renderActive();}
+function amrapReset(ei,si){var s=DB.active.items[ei].sets[si];s.endAt=null;saveQuiet();renderActive();}
 function weightChips(ei,si,prev,it){
   var s=DB.active.items[ei].sets[si],cur=parseFloat(s.weight),seen={},arr=[];
   function add(v){if(v==null||isNaN(v))return;v=Math.round(v*100)/100;if(v>0&&!seen[v]){seen[v]=1;arr.push(v);}}
@@ -968,6 +1050,11 @@ function clearBand(ei,si){DB.active.items[ei].sets[si].band='';saveQuiet();rende
 function completeCurrent(){
   var cur=awCurrent();if(!cur)return;
   var it=DB.active.items[cur.ei],s=it.sets[cur.si];
+  if(it.gkind==='amrap'){
+    if(s.reps===''||s.reps==null)s.reps='0';
+    s.done=true;clearInterval(amrapInt);amrapInt=null;
+    saveQuiet();startRest(it.rest||120);awCur=null;renderActive();return;
+  }
   if(s.reps===''||s.reps==null){var g=parseInt(s.tReps||it.reps);if(!isNaN(g))s.reps=String(g);}
   s.done=true;
   if(it.dropSet&&!s.half){var nx=it.sets[cur.si+1];if(!(nx&&nx.half)){var w=parseFloat(s.weight)||0,rp=parseInt(s.reps)||0;it.sets.splice(cur.si+1,0,{weight:w?String(Math.round(w/2*100)/100):'',reps:'',done:false,tReps:rp?String(rp*2):'',half:true,band:'',fail:false});}}
@@ -1027,7 +1114,7 @@ function finishWorkout(){
   var done=[];
   DB.active.items.forEach(function(it){
     var ds=it.sets.filter(function(s){return s.done&&s.reps!=='';});
-    if(ds.length)done.push({exId:it.exId,glabel:it.glabel||'',gkind:it.gkind||'',sets:ds.map(function(s){return {weight:effKg(s),reps:parseInt(s.reps)||0,half:!!s.half,band:s.band||'',fail:!!s.fail};})});
+    if(ds.length)done.push({exId:it.exId,glabel:it.glabel||'',gkind:it.gkind||'',sets:ds.map(function(s){var o={weight:effKg(s),reps:parseInt(s.reps)||0,half:!!s.half,band:s.band||'',fail:!!s.fail};if(s.amrap){o.amrap=true;o.ignition=parseInt(s.ignition)||0;}return o;})});
   });
   if(!done.length){if(!confirm('No completed sets. Finish anyway (won\'t be saved)?'))return;DB.active=null;save();stopRest();tab('workout');return;}
   var prs=detectPRs(done);
@@ -1090,6 +1177,7 @@ function grpFields(gi,g,kind){
   if(kind==='timed')return '<div class="two"><div><label>Time cap (incl. rest)</label>'+ip('timeCap','3:00')+'</div><div><label>Rounds</label>'+ip('rounds','1',1)+'</div></div>';
   if(kind==='superset')return '<div class="three"><div><label>Rounds</label>'+ip('rounds','1',1)+'</div><div><label>Time cap</label>'+ip('timeCap','5:30')+'</div><div><label>Rest (s)</label>'+ip('rest','60',1)+'</div></div>';
   if(kind==='fast50')return '<label>Rep ladder (flows between the exercises)</label>'+ip('ladder','14/12/10/8/6');
+  if(kind==='amrap')return '<div class="two"><div><label>Clock per exercise</label>'+ip('timeCap','5:00')+'</div><div><label>Rest between (sec)</label>'+ip('rest','120',1)+'</div></div>';
   return '';
 }
 function excFields(gi,xi,x,kind){
@@ -1097,6 +1185,8 @@ function excFields(gi,xi,x,kind){
   var h='<div class="exc-edit"><div class="eh"><span class="nm">'+esc(e?e.name:'?')+'</span><button class="x" onclick="rmExc('+gi+','+xi+')">✕</button></div>';
   if(kind==='fast50'){
     h+='<label>Load / band</label><input value="'+esc(x.weight||'')+'" oninput="excSet('+gi+','+xi+',\'weight\',this.value)">'+excBandChips(gi,xi);
+  }else if(kind==='amrap'){
+    h+='<label>Load (your 10–12 rep max)</label><input placeholder="10-12 RM" value="'+esc(x.weight||'')+'" oninput="excSet('+gi+','+xi+',\'weight\',this.value)">';
   }else{
     h+='<div class="three"><div><label>Reps</label><input placeholder="8-12" value="'+esc(x.reps||'')+'" oninput="excSet('+gi+','+xi+',\'reps\',this.value)"></div>'+
       '<div><label>Load</label><input placeholder="50% 12RM" value="'+esc(x.weight||'')+'" oninput="excSet('+gi+','+xi+',\'weight\',this.value)"></div>'+
@@ -1111,6 +1201,7 @@ function excFields(gi,xi,x,kind){
 function blockSummary(g){
   var kind=g.kind||'standard';
   if(kind==='fast50')return 'Fast 50 · '+(g.ladder||'14/12/10/8/6')+' reps';
+  if(kind==='amrap')return 'AMRAP · '+(g.timeCap||'5:00')+' clock · effective reps';
   function rounds(n){n=parseInt(n)||1;return n+' round'+(n>1?'s':'');}
   if(kind==='timed'){var p=[(g.timeCap||'3:00')+' cap (incl. rest)'];p.push(rounds(g.rounds));return p.join(' · ');}
   if(kind==='superset'){var p=[rounds(g.rounds)];if(g.timeCap)p.push(g.timeCap+' cap');if(g.rest)p.push(g.rest+'s rest');return p.join(' · ');}
@@ -1150,14 +1241,14 @@ function openBlockEditor(gi){
   var g=editingRoutine.groups[gi];
   if(!g){openRoutineEditor();return;}
   var kind=g.kind||'standard';
-  var seg='<div class="kindseg">'+['standard','timed','superset','fast50'].map(function(k){return '<button class="'+(kind===k?'on':'')+'" onclick="setKind('+gi+',\''+k+'\')">'+kindLabel(k)+'</button>';}).join('')+'</div>';
+  var seg='<div class="kindseg">'+['standard','timed','superset','fast50','amrap'].map(function(k){return '<button class="'+(kind===k?'on':'')+'" onclick="setKind('+gi+',\''+k+'\')">'+kindLabel(k)+'</button>';}).join('')+'</div>';
   var exs=(g.exercises||[]).map(function(x,xi){return excFields(gi,xi,x,kind);}).join('');
   var canAdd=!(kind==='standard'&&(g.exercises||[]).length>=1);
   var hasEx=(g.exercises||[]).length>0;
   openModal(
     '<div class="sheet-head"><button class="close" onclick="openRoutineEditor()">‹</button><h3>Edit Block</h3><button class="close" style="font-size:15px;font-weight:700;color:var(--accent)" onclick="openRoutineEditor()">Done</button></div>'+
     '<div class="sheet-body" id="be-body" onscroll="beScroll=this.scrollTop">'+
-    '<div class="help">How does this block flow? <b>Straight</b> sets, a <b>Timed</b> block (cap includes rest), a <b>Superset</b> (2+ exercises), or a <b>Fast 50</b> ladder.</div>'+
+    '<div class="help">How does this block flow? <b>Straight</b> sets, a <b>Timed</b> block (cap includes rest), a <b>Superset</b> (2+ exercises), a <b>Fast 50</b> ladder, or <b>AMRAP</b> effective-reps (5-min clock, ignition set + max reps).</div>'+
     seg+
     '<label>Block label (optional, e.g. Warm-up, A1)</label><input value="'+esc(g.label||'')+'" oninput="grpSet('+gi+',\'label\',this.value)">'+
     grpFields(gi,g,kind)+
@@ -1207,6 +1298,7 @@ function setKind(gi,kind){var g=editingRoutine.groups[gi];g.kind=kind;
   if(kind==='fast50'&&!g.ladder)g.ladder='14/12/10/8/6';
   if(kind==='standard'&&!g.rounds)g.rounds=3;
   if((kind==='timed'||kind==='superset')&&!g.rounds)g.rounds=1;
+  if(kind==='amrap'){if(!g.timeCap)g.timeCap='5:00';if(!g.rest||g.rest===DB.settings.rest)g.rest=120;g.rounds=1;}
   openBlockEditor(gi);}
 function addGroup(){editingRoutine.groups.push({id:uid(),kind:'standard',label:'',rounds:3,timeCap:'',rest:DB.settings.rest,ladder:'',exercises:[]});beScroll=0;openBlockEditor(editingRoutine.groups.length-1);}
 function rmGroup(gi){editingRoutine.groups.splice(gi,1);openRoutineEditor();}
@@ -1605,7 +1697,79 @@ function fmtClock(sec){sec=Math.max(0,sec|0);var h=Math.floor(sec/3600),m=Math.f
 function fmtDate(ts){return new Date(ts).toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});}
 function fmtDateTime(ts){return new Date(ts).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});}
 
+/* ───────── X-Press Month 2 seed ───────── */
+function ensureMonth2(){
+  var changed=false;
+  function norm(s){return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');}
+  function ex(name,muscle){
+    var nn=norm(name),f=DB.exercises.filter(function(e){return norm(e.name)===nn;})[0];
+    if(f)return f.id;
+    var e={id:uid(),name:name,muscle:muscle||'Other'};DB.exercises.push(e);changed=true;return e.id;
+  }
+  function exc(id,reps,load,notes){return {exId:id,reps:reps||'',weight:load||'',rir:'',oneHalf:false,dropSet:false,notes:notes||''};}
+  function f50(aId,bId){return {id:uid(),kind:'fast50',label:'Fast 50 Warm-up',rounds:1,timeCap:'3:00',rest:30,ladder:'14/12/10/8/6',exercises:[exc(aId,'','Band'),exc(bId,'','Band')]};}
+  function amr(id,notes){return {id:uid(),kind:'amrap',label:'',rounds:1,timeCap:'5:00',rest:120,ladder:'',exercises:[exc(id,'AMRAP','10-12 RM',notes)]};}
+  function sc(id,reps,load,notes){return {id:uid(),kind:'standard',label:'Systems Check',rounds:1,timeCap:'',rest:DB.settings.rest,ladder:'',exercises:[exc(id,reps,load,notes)]};}
+  function ss(label,reps,load,cap,items){return {id:uid(),kind:'superset',label:label,rounds:3,timeCap:cap,rest:DB.settings.rest,ladder:'',exercises:items.map(function(it){return exc(it.id,reps,load,it.notes);})};}
+
+  // shared exercise ids
+  var kbIncPress=ex('Kneeling Banded Incline Press','Chest'), bSqueezeRow=ex('Banded Squeeze Rows','Back');
+  var anchJumpSquat=ex('Anchored Jump Squats','Legs'), kbHipThrust=ex('Kneeling Banded Hip Thrusts','Legs');
+  var bMilPress=ex('Banded Military Press','Shoulders'), bRowUps=ex('Banded Row Ups','Back');
+  var bCurls=ex('Banded Curls','Arms'), bOhExt=ex('Banded Overhead Extensions','Arms');
+  var dbSpanish=ex('DB Spanish Squats','Legs'), highLowCross=ex('High-to-Low Crossovers','Chest');
+
+  var defs=[
+    {id:'xpress-m2-cb3',name:'X-Press: Chest & Back 3',groups:[
+      f50(kbIncPress,bSqueezeRow),
+      amr(ex('Weighted Dips','Chest')),amr(ex('Crossovers','Chest')),
+      amr(ex('Barbell Row','Back')),amr(ex('Lat Pulldown','Back'))]},
+    {id:'xpress-m2-legs3',name:'X-Press: Legs 3',groups:[
+      f50(anchJumpSquat,kbHipThrust),
+      amr(ex('Alternating DB Reverse Lunge','Legs'),'each side'),amr(ex('Barbell RDLs','Legs')),
+      amr(dbSpanish),amr(ex('Cable Pull Throughs','Legs'))]},
+    {id:'xpress-m2-shoulders3',name:'X-Press: Shoulders & Upper Back 3',groups:[
+      f50(bMilPress,bRowUps),
+      amr(ex('DB / Barbell OHP → Push Press','Shoulders')),amr(ex('DB Lateral Raises','Shoulders')),
+      amr(ex('Face Pulls','Back')),amr(ex('Barbell Shrugs','Shoulders'))]},
+    {id:'xpress-m2-arms3',name:'X-Press: Arms 3',groups:[
+      f50(bCurls,bOhExt),
+      amr(ex('Barbell Curls','Arms')),amr(ex('DB Cross Body Curls','Arms'),'each side'),
+      amr(ex('DB JM Press','Arms')),amr(ex('Triceps Pushdowns','Arms'))]},
+    {id:'xpress-m2-cb4',name:'X-Press: Chest & Back 4',groups:[
+      f50(kbIncPress,bSqueezeRow),
+      sc(highLowCross,'10','12 RM','Systems check'),
+      ss('High Tensity','6-8/F/F','8 RM','3:00',[{id:highLowCross},{id:ex('Wrap Around Row','Back')}]),
+      ss('Mod Tensity','10-12/F/F','12 RM','2:45',[{id:ex('DB Bench Press','Chest')},{id:ex('DB Pullovers','Chest')}]),
+      ss('Low Tensity','F','BW','2:45',[{id:ex('Pushups','Chest')},{id:ex('Pullups / Assisted Pullups','Back')}])]},
+    {id:'xpress-m2-legs4',name:'X-Press: Legs 4',groups:[
+      f50(anchJumpSquat,kbHipThrust),
+      sc(dbSpanish,'10','12 RM','Leg Ext swap'),
+      ss('High Tensity','6-8/F/F','8 RM','3:00',[{id:dbSpanish},{id:ex('DB RDLs','Legs')}]),
+      ss('Mod Tensity','10-12/F/F','12 RM','2:45',[{id:ex('DB Static Creeping Lunge','Legs'),notes:'each side'},{id:ex('DB Frog Press','Legs')}]),
+      ss('Low Tensity','F','BW','2:45',[{id:ex('Split Squat Jumps','Legs')},{id:ex('Slick Floor Bridge Hamstring Curls','Legs')}])]},
+    {id:'xpress-m2-shoulders4',name:'X-Press: Shoulders & Upper Back 4',groups:[
+      f50(bMilPress,bRowUps),
+      sc(ex('DB / Barbell Push Press','Shoulders'),'10','12 RM','Systems check'),
+      ss('High Tensity','6-8/F/F','8 RM','3:00',[{id:ex('DB / Barbell Push Press','Shoulders')},{id:ex('DB High Pulls','Shoulders')}]),
+      ss('Mod Tensity','10-12/F/F','12 RM','2:45',[{id:ex('DB Cheat Laterals','Shoulders'),notes:'each side'},{id:ex('Rear Delt Rows','Back')}]),
+      ss('Low Tensity','F','BW','2:45',[{id:ex('Pike Pushups','Shoulders')},{id:ex('Back Widows','Back')}])]},
+    {id:'xpress-m2-arms4',name:'X-Press: Arms 4',groups:[
+      f50(bCurls,bOhExt),
+      sc(ex('Chin Ups','Back'),'2-3 RIR','BW','Systems check'),
+      ss('High Tensity','6-8/F/F','8 RM','3:00',[{id:ex('Weighted / Assisted Chin Ups','Back')},{id:ex('Close Grip Bench Press','Arms')}]),
+      ss('Mod Tensity','10-12/F/F','12 RM','2:45',[{id:ex('DB Hammer Curls','Arms')},{id:ex('DB / EZ Bar Overhead Extensions','Arms')}]),
+      ss('Low Tensity','F','Band','2:45',[{id:ex('Banded Drag Curls','Arms')},{id:ex('Banded Skull Crushers','Arms')}])]}
+  ];
+  defs.forEach(function(d){
+    if(DB.routines.some(function(r){return r.id===d.id;}))return;
+    DB.routines.push({id:d.id,name:d.name,notes:'',groups:d.groups});changed=true;
+  });
+  if(changed)save();
+}
+
 /* ───────── boot ───────── */
+ensureMonth2();
 awTimerInt=setInterval(tickAw,1000);
 stravaHandleRedirect();
 if(syncConfigured())setTimeout(function(){syncNow(true);},800);
