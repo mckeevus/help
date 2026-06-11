@@ -1,0 +1,12 @@
+{
+  "name": "Lifts",
+  "short_name": "Lifts",
+  "start_url": "./lifts.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f2f2f7",
+  "theme_color": "#f2f2f7",
+  "icons": [
+    { "src": "lifts-icon.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
