@@ -631,6 +631,12 @@ button{
 .setchip{width:34px;height:34px;border-radius:10px;background:var(--bg);font-weight:700;font-size:13px;color:var(--muted);box-shadow:inset 0 0 0 1px rgba(60,60,67,.1);}
 .setchip.done{background:var(--green-soft);color:var(--green);}
 .setchip.cur{background:var(--accent);color:#fff;box-shadow:none;}
+
+/* ── History editor: band gets its own column ── */
+.set-grid.histed{grid-template-columns:24px 1.2fr 1fr 38px 30px 34px !important;gap:7px !important;}
+.set-grid.histed .set-bandchip{background:var(--bc,#888) !important;color:#fff !important;}
+.bandcol{min-height:48px;border-radius:16px;background:#f7f7fa;box-shadow:inset 0 0 0 1px rgba(60,60,67,.08);display:flex;align-items:center;justify-content:center;}
+.bandcol .bdot{width:14px;height:14px;border-radius:50%;background:var(--faint);}
 </style>
 
 </head>
@@ -1580,15 +1586,16 @@ function renderHistEditor(){
     var rows=it.sets.map(function(s,j){
       var b=s.band?bandByKey(s.band):null;
       var wcell=b
-        ?'<button class="set-bandchip" style="background:'+b.color+'" onclick="histBand('+i+','+j+')">'+b.name+' <span class="pen">✎</span></button>'
-        :'<div class="wcell"><input type="number" inputmode="decimal" value="'+(s.weight!=null?s.weight:'')+'" oninput="histSet('+i+','+j+',\'weight\',this.value)"><button class="bandbtn" onclick="histBand('+i+','+j+')"><span class="bdot"></span>Band</button></div>';
-      return '<div class="set-grid"><div class="set-num">'+(j+1)+'</div>'+wcell+
+        ?'<button class="set-bandchip" style="--bc:'+b.color+'" onclick="histBand('+i+','+j+')">'+b.name+'</button>'
+        :'<input type="number" inputmode="decimal" value="'+(s.weight!=null?s.weight:'')+'" oninput="histSet('+i+','+j+',\'weight\',this.value)">';
+      return '<div class="set-grid histed"><div class="set-num">'+(j+1)+'</div>'+wcell+
         '<input type="number" inputmode="numeric" value="'+(s.reps!=null?s.reps:'')+'" oninput="histSet('+i+','+j+',\'reps\',this.value)">'+
+        '<button class="bandcol" onclick="histBand('+i+','+j+')"><span class="bdot"'+(b?' style="background:'+b.color+'"':'')+'></span></button>'+
         '<button class="failbtn'+(s.fail?' on':'')+'" onclick="histFail('+i+','+j+')">F</button>'+
         '<button class="check" onclick="histRmSet('+i+','+j+')">✕</button></div>';
     }).join('');
     return '<div class="ex-block"><div class="ex-head"><div class="name">'+esc(e?e.name:'?')+'</div></div>'+
-      '<div class="set-grid hdr"><div>Set</div><div>'+u()+'</div><div>Reps</div><div>Fail</div><div>Del</div></div>'+rows+
+      '<div class="set-grid histed hdr"><div>Set</div><div>'+u()+'</div><div>Reps</div><div>Band</div><div>F</div><div>Del</div></div>'+rows+
       '<button class="addset" onclick="histAddSet('+i+')">＋ Add set</button></div>';
   }).join('');
   openModal('<div class="sheet-head"><h3>Edit workout</h3><button class="close" onclick="closeModal()">✕</button></div>'+
