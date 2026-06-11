@@ -621,6 +621,16 @@ button{
 .prcard .nm{font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .prcard .v{font-size:22px;font-weight:800;letter-spacing:-.01em;margin-top:6px;}
 .prcard .d{font-size:12px;font-weight:800;color:var(--green);margin-top:2px;}
+
+/* ── Set navigation + editing ── */
+.fc-setnav{display:flex;align-items:center;justify-content:center;gap:14px;}
+.fc-setnav button{width:34px;height:34px;border-radius:50%;background:var(--bg);color:var(--muted);font-size:18px;font-weight:700;flex:none;display:flex;align-items:center;justify-content:center;}
+.fc-setnav button:active{background:var(--accent-soft);color:var(--accent);}
+.fc-editing{text-align:center;font-size:11px;font-weight:800;color:var(--amber);text-transform:uppercase;letter-spacing:.05em;margin-top:6px;}
+.setchips{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
+.setchip{width:34px;height:34px;border-radius:10px;background:var(--bg);font-weight:700;font-size:13px;color:var(--muted);box-shadow:inset 0 0 0 1px rgba(60,60,67,.1);}
+.setchip.done{background:var(--green-soft);color:var(--green);}
+.setchip.cur{background:var(--accent);color:#fff;box-shadow:none;}
 </style>
 
 </head>
@@ -855,11 +865,22 @@ function parseScheme(text){
 var awCur=null; /* {ei,si} explicitly focused set */
 function awCurrent(){
   var items=DB.active.items;
-  if(awCur){var it=items[awCur.ei];if(it&&it.sets[awCur.si]&&!it.sets[awCur.si].done)return awCur;}
+  if(awCur){var it=items[awCur.ei];if(it&&it.sets[awCur.si])return awCur;}
   for(var ei=0;ei<items.length;ei++){for(var si=0;si<items[ei].sets.length;si++){if(!items[ei].sets[si].done)return {ei:ei,si:si};}}
   return null;
 }
 function gotoSet(ei,si){awCur={ei:ei,si:si};renderActive();}
+function awNav(d){
+  var cur=awCurrent();if(!cur)return;
+  var items=DB.active.items,ei=cur.ei,si=cur.si+d;
+  while(ei>=0&&ei<items.length){
+    if(si>=0&&si<items[ei].sets.length){gotoSet(ei,si);return;}
+    ei+=d;
+    if(ei<0||ei>=items.length)return;
+    si=d>0?0:items[ei].sets.length-1;
+  }
+}
+function awUncomplete(ei,si){DB.active.items[ei].sets[si].done=false;saveQuiet();renderActive();}
 function totalDoneSets(){var n=0;DB.active.items.forEach(function(it){it.sets.forEach(function(s){if(s.done)n++;});});return n;}
 function renderAwStats(){
   if(!DB.active||!document.getElementById('aw-stats'))return;
@@ -888,6 +909,7 @@ function renderActive(){
     nx.innerHTML='';return;
   }
   var ei=cur.ei,si=cur.si,it=DB.active.items[ei],ex=exById(it.exId),s=it.sets[si];
+  var editingDone=!!s.done;
   if(it.gkind==='amrap'){fc.innerHTML=renderAmrapCard(ei,si,it,ex,s);nx.innerHTML=nextUpHtml(ei);manageAmrapTimer();return;}
   var prog=(ei+1)+' / '+DB.active.items.length;
   var scheme=s.tReps||it.reps;
@@ -926,17 +948,20 @@ function renderActive(){
   var fail='<div class="fc-fail'+(s.fail?' on':'')+'" onclick="awToggleFail('+ei+','+si+')"><div class="tx"><div class="t">Taken to failure</div><div class="s">Mark if this set was taken to failure</div></div><div class="sw"></div></div>';
   fc.innerHTML='<div class="fc"><div class="fc-head"><span class="fc-prog">'+prog+'</span><span class="fc-name">'+esc(ex?ex.name:'Exercise')+'</span><button class="fc-edit" onclick="awJump()">☰</button></div>'+
     '<div class="fc-sub">'+subBits.join('  ·  ')+'</div>'+
-    '<div class="fc-setlabel">Set '+(si+1)+' of '+it.sets.length+'</div>'+big+
+    '<div class="fc-setnav"><button onclick="awNav(-1)">‹</button><div class="fc-setlabel">Set '+(si+1)+' of '+it.sets.length+'</div><button onclick="awNav(1)">›</button></div>'+
+    (editingDone?'<div class="fc-editing">Editing logged set</div>':'')+big+
     '<div class="fc-repspill"><span id="fc-repbig">'+rv+' reps</span></div>'+
     '<div class="fc-pg"><div class="box prev"><div class="k">Previous</div><div class="v">'+prevTxt+'</div></div><div class="arrow">→</div><div class="box goal"><div class="k">Goal</div><div class="v">'+goalTxt+'</div></div></div>'+
     wsec+rsec+fail+
-    '<button class="btn fc-complete" onclick="completeCurrent()">✓ Complete Set</button>'+
-    '<div class="fc-hint">Rest timer starts automatically</div></div>';
+    '<button class="btn fc-complete" onclick="completeCurrent()">✓ '+(editingDone?'Update Set':'Complete Set')+'</button>'+
+    (editingDone?'<button class="btn ghost sm" style="width:100%;margin-top:8px" onclick="awUncomplete('+ei+','+si+')">Mark as not completed</button>':'')+
+    '<div class="fc-hint">'+(editingDone?'Changes save when you tap Update — no rest timer':'Rest timer starts automatically')+'</div></div>';
   nx.innerHTML=nextUpHtml(ei);
 }
 var amrapInt=null;
 function renderAmrapCard(ei,si,it,ex,s){
   var prog=(ei+1)+' / '+DB.active.items.length;
+  var editingDone=!!s.done;
   var cap=s.tCap||300;
   var running=s.endAt&&s.endAt>Date.now();
   var ended=s.endAt&&s.endAt<=Date.now();
@@ -953,12 +978,22 @@ function renderAmrapCard(ei,si,it,ex,s){
   if(!s.endAt){ctrl='<button class="btn amrap-go" id="amrap-btn" onclick="amrapStart('+ei+','+si+')">▶ Start 5:00 clock</button>';}
   else if(running){ctrl='<button class="btn ghost sm" id="amrap-btn" onclick="amrapReset('+ei+','+si+')">↺ Reset clock</button>';}
   else{ctrl='<button class="btn ghost sm" id="amrap-btn" style="display:none" onclick="amrapReset('+ei+','+si+')">↺ Reset clock</button>';}
-  var wv=(s.weight!==''&&s.weight!=null)?s.weight:'';
-  var wsec='<div class="fc-sec"><div class="lab">Load ('+u()+') · your 10–12 rep max</div>'+
-    '<div class="stepper"><button class="pm" onclick="awStep('+ei+','+si+',\'weight\',-2.5)">−</button>'+
-    '<input type="number" inputmode="decimal" value="'+wv+'" placeholder="0" oninput="awInput('+ei+','+si+',\'weight\',this.value)">'+
-    '<button class="pm" onclick="awStep('+ei+','+si+',\'weight\',2.5)">+</button></div>'+
-    weightChips(ei,si,prev,it)+'</div>';
+  var wsec;
+  if(s.band){
+    var bd=bandByKey(s.band)||{};
+    wsec='<div class="fc-bandbig"><div class="chip" style="background:'+(bd.color||'#888')+'">'+esc(bd.name||'Band')+'</div></div>'+
+      '<div class="fc-sec" style="margin-top:10px"><div class="lab">Band · logs '+(bd.kg||0)+' '+u()+'</div>'+
+      '<button class="fc-bandbtn" onclick="openBandPicker('+ei+','+si+')">⛓ Change band</button>'+
+      '<div class="chips"><button onclick="clearBand('+ei+','+si+')">Remove band</button></div></div>';
+  }else{
+    var wv=(s.weight!==''&&s.weight!=null)?s.weight:'';
+    wsec='<div class="fc-sec"><div class="lab">Load ('+u()+') · your 10–12 rep max</div>'+
+      '<div class="stepper"><button class="pm" onclick="awStep('+ei+','+si+',\'weight\',-2.5)">−</button>'+
+      '<input type="number" inputmode="decimal" value="'+wv+'" placeholder="0" oninput="awInput('+ei+','+si+',\'weight\',this.value)">'+
+      '<button class="pm" onclick="awStep('+ei+','+si+',\'weight\',2.5)">+</button></div>'+
+      weightChips(ei,si,prev,it)+
+      '<button class="fc-bandbtn" style="margin-top:8px" onclick="openBandPicker('+ei+','+si+')">⛓ Use band</button></div>';
+  }
   var igsec='<div class="fc-sec"><div class="lab">Ignition reps · warm-up, don\'t count</div>'+
     '<div class="stepper"><button class="pm" onclick="awStep('+ei+','+si+',\'ignition\',-1)">−</button>'+
     '<input type="number" inputmode="numeric" value="'+(s.ignition!==''&&s.ignition!=null?s.ignition:'')+'" placeholder="10" oninput="awInput('+ei+','+si+',\'ignition\',this.value)">'+
@@ -970,14 +1005,17 @@ function renderAmrapCard(ei,si,it,ex,s){
     '<button class="pm" onclick="awStep('+ei+','+si+',\'reps\',1)">+</button></div></div>';
   return '<div class="fc"><div class="fc-head"><span class="fc-prog">'+prog+'</span><span class="fc-name">'+esc(ex?ex.name:'Exercise')+'</span><button class="fc-edit" onclick="awJump()">☰</button></div>'+
     '<div class="fc-sub">'+subBits.join('  ·  ')+'</div>'+
+    '<div class="fc-setnav"><button onclick="awNav(-1)">‹</button><div class="fc-setlabel">Set '+(si+1)+' of '+it.sets.length+'</div><button onclick="awNav(1)">›</button></div>'+
+    (editingDone?'<div class="fc-editing">Editing logged set</div>':'')+
     '<div class="'+clockCls+'" id="amrap-clock">'+fmtClock(remain)+'</div>'+
     '<div class="amrap-state" id="amrap-state">'+stateTxt+'</div>'+
     ctrl+
     '<div class="fc-repspill" style="margin-top:14px"><span id="fc-repbig">'+rv+' reps</span></div>'+
     '<div class="fc-pg"><div class="box prev"><div class="k">Previous</div><div class="v">'+prevTxt+'</div></div><div class="arrow">→</div><div class="box goal"><div class="k">Goal</div><div class="v">'+goalTxt+'</div></div></div>'+
     wsec+igsec+rsec+
-    '<button class="btn fc-complete" onclick="completeCurrent()">✓ Log effective reps</button>'+
-    '<div class="fc-hint">2 min rest before the next exercise</div></div>';
+    '<button class="btn fc-complete" onclick="completeCurrent()">✓ '+(editingDone?'Update effective reps':'Log effective reps')+'</button>'+
+    (editingDone?'<button class="btn ghost sm" style="width:100%;margin-top:8px" onclick="awUncomplete('+ei+','+si+')">Mark as not completed</button>':'')+
+    '<div class="fc-hint">'+(editingDone?'Changes save when you tap Update — no rest timer':'2 min rest before the next exercise')+'</div></div>';
 }
 function manageAmrapTimer(){
   clearInterval(amrapInt);amrapInt=null;
@@ -1046,30 +1084,37 @@ function awStep(ei,si,k,d){
 }
 function awChip(ei,si,k,v){DB.active.items[ei].sets[si][k]=String(v);saveQuiet();renderActive();}
 function awToggleFail(ei,si){var s=DB.active.items[ei].sets[si];s.fail=!s.fail;saveQuiet();renderActive();}
-function clearBand(ei,si){DB.active.items[ei].sets[si].band='';saveQuiet();renderActive();}
+function clearBand(ei,si){DB.active.items[ei].sets.forEach(function(s,i){if(i===si||!s.done)s.band='';});saveQuiet();renderActive();}
 function completeCurrent(){
   var cur=awCurrent();if(!cur)return;
   var it=DB.active.items[cur.ei],s=it.sets[cur.si];
+  var wasDone=!!s.done;
   if(it.gkind==='amrap'){
     if(s.reps===''||s.reps==null)s.reps='0';
     s.done=true;clearInterval(amrapInt);amrapInt=null;
-    saveQuiet();startRest(it.rest||120);awCur=null;renderActive();return;
+    saveQuiet();if(!wasDone)startRest(it.rest||120);awCur=null;renderActive();return;
   }
   if(s.reps===''||s.reps==null){var g=parseInt(s.tReps||it.reps);if(!isNaN(g))s.reps=String(g);}
   s.done=true;
-  if(it.dropSet&&!s.half){var nx=it.sets[cur.si+1];if(!(nx&&nx.half)){var w=parseFloat(s.weight)||0,rp=parseInt(s.reps)||0;it.sets.splice(cur.si+1,0,{weight:w?String(Math.round(w/2*100)/100):'',reps:'',done:false,tReps:rp?String(rp*2):'',half:true,band:'',fail:false});}}
+  if(!wasDone&&it.dropSet&&!s.half){var nx=it.sets[cur.si+1];if(!(nx&&nx.half)){var w=parseFloat(s.weight)||0,rp=parseInt(s.reps)||0;it.sets.splice(cur.si+1,0,{weight:w?String(Math.round(w/2*100)/100):'',reps:'',done:false,tReps:rp?String(rp*2):'',half:true,band:'',fail:false});}}
   saveQuiet();
-  if(it.gkind==='standard'||!it.gid)startRest(it.rest||DB.settings.rest);
+  if(!wasDone&&(it.gkind==='standard'||!it.gid))startRest(it.rest||DB.settings.rest);
   awCur=null;renderActive();
 }
 function awJump(){
+  var cur=awCurrent();
   var rows=DB.active.items.map(function(it,ei){
     var ex=exById(it.exId),done=it.sets.filter(function(s){return s.done;}).length,allDone=done===it.sets.length,firstInc=0;
     for(var i=0;i<it.sets.length;i++){if(!it.sets[i].done){firstInc=i;break;}}
     var sup=(it.gid&&it.gkind&&it.gkind!=='standard')?' · '+kindLabel(it.gkind):'';
-    return '<div class="pick" onclick="closeModal();gotoSet('+ei+','+firstInc+')"><div class="grow"><div class="t" style="font-weight:600">'+esc(ex?ex.name:'?')+'</div><div class="mg">'+done+'/'+it.sets.length+' sets'+(allDone?' ✓':'')+sup+'</div></div><span class="chev">›</span></div>';
+    var chips='<div class="setchips">'+it.sets.map(function(s,si){
+      var cls='setchip'+(s.done?' done':'')+((cur&&cur.ei===ei&&cur.si===si)?' cur':'');
+      return '<button class="'+cls+'" onclick="event.stopPropagation();closeModal();gotoSet('+ei+','+si+')">'+(si+1)+'</button>';
+    }).join('')+'</div>';
+    return '<div class="pick" onclick="closeModal();gotoSet('+ei+','+firstInc+')"><div class="grow"><div class="t" style="font-weight:600">'+esc(ex?ex.name:'?')+'</div><div class="mg">'+done+'/'+it.sets.length+' sets'+(allDone?' ✓':'')+sup+'</div>'+chips+'</div><span class="chev">›</span></div>';
   }).join('');
   openModal('<div class="sheet-head"><h3>Jump to exercise</h3><button class="close" onclick="closeModal()">✕</button></div><div class="sheet-body">'+
+    '<div class="help" style="margin-bottom:10px">Tap a set number to open it — green sets are logged and can be edited.</div>'+
     (rows||'<div class="empty" style="padding:24px">No exercises yet</div>')+
     '<button class="btn ghost" style="margin-top:10px" onclick="closeModal();openExPicker(\'active\')">＋ Add exercise</button></div>');
 }
@@ -1348,8 +1393,11 @@ function openBandPicker(ei,si){
   openModal('<div class="sheet-head"><h3>Choose band</h3><button class="close" onclick="closeModal()">✕</button></div><div class="sheet-body">'+rows+'</div>');
 }
 function pickBand(ei,si,key){
-  var s=DB.active.items[ei].sets[si];
-  if(key){s.band=key;s.weight='';}else{s.band='';}
+  /* band sticks for the whole exercise: apply to this set + every set not yet completed */
+  DB.active.items[ei].sets.forEach(function(s,i){
+    if(i!==si&&s.done)return;
+    if(key){s.band=key;s.weight='';}else{s.band='';}
+  });
   saveQuiet();closeModal();renderActive();
 }
 function addCustomExercise(){
@@ -1514,8 +1562,68 @@ function viewWorkout(id){
   var prs=(w.prs&&w.prs.length)?'<div class="sec-label" style="margin-top:0">Personal bests this session</div>'+w.prs.map(function(p){var e=exById(p.exId);return '<div class="pr-row"><span class="em">🏆</span><div class="grow"><div class="t">'+esc(e?e.name:'?')+'</div><div class="s">'+prLabel(p.type)+': '+p.value+' '+u()+'</div></div></div>';}).join(''):'';
   openModal('<div class="sheet-head"><h3>'+esc(w.name)+'</h3><button class="close" onclick="closeModal()">✕</button></div>'+
     '<div class="sheet-body"><div class="s" style="color:var(--muted);font-size:13px;margin-bottom:14px">'+fmtDate(w.date)+' · '+fmtClock(w.duration)+'</div>'+
-    prs+body+'<button class="btn ghost" style="margin-top:6px" onclick="repeatWorkout(\''+w.id+'\')">↻ Repeat this workout</button>'+
+    prs+body+'<button class="btn ghost" style="margin-top:6px" onclick="editWorkout(\''+w.id+'\')">✎ Edit workout</button>'+
+    '<button class="btn ghost" style="margin-top:10px" onclick="repeatWorkout(\''+w.id+'\')">↻ Repeat this workout</button>'+
     '<button class="btn ghost red" style="margin-top:10px" onclick="deleteWorkout(\''+w.id+'\')">Delete</button></div>');
+}
+/* ───────── history editing ───────── */
+var editingHist=null;
+function editWorkout(id){
+  var w=DB.history.filter(function(x){return x.id===id;})[0];if(!w)return;
+  editingHist=JSON.parse(JSON.stringify(w));
+  renderHistEditor();
+}
+function renderHistEditor(){
+  var w=editingHist;
+  var body=w.items.map(function(it,i){
+    var e=exById(it.exId);
+    var rows=it.sets.map(function(s,j){
+      var b=s.band?bandByKey(s.band):null;
+      var wcell=b
+        ?'<button class="set-bandchip" style="background:'+b.color+'" onclick="histBand('+i+','+j+')">'+b.name+' <span class="pen">✎</span></button>'
+        :'<div class="wcell"><input type="number" inputmode="decimal" value="'+(s.weight!=null?s.weight:'')+'" oninput="histSet('+i+','+j+',\'weight\',this.value)"><button class="bandbtn" onclick="histBand('+i+','+j+')"><span class="bdot"></span>Band</button></div>';
+      return '<div class="set-grid"><div class="set-num">'+(j+1)+'</div>'+wcell+
+        '<input type="number" inputmode="numeric" value="'+(s.reps!=null?s.reps:'')+'" oninput="histSet('+i+','+j+',\'reps\',this.value)">'+
+        '<button class="failbtn'+(s.fail?' on':'')+'" onclick="histFail('+i+','+j+')">F</button>'+
+        '<button class="check" onclick="histRmSet('+i+','+j+')">✕</button></div>';
+    }).join('');
+    return '<div class="ex-block"><div class="ex-head"><div class="name">'+esc(e?e.name:'?')+'</div></div>'+
+      '<div class="set-grid hdr"><div>Set</div><div>'+u()+'</div><div>Reps</div><div>Fail</div><div>Del</div></div>'+rows+
+      '<button class="addset" onclick="histAddSet('+i+')">＋ Add set</button></div>';
+  }).join('');
+  openModal('<div class="sheet-head"><h3>Edit workout</h3><button class="close" onclick="closeModal()">✕</button></div>'+
+    '<div class="sheet-body">'+
+    '<div class="field"><label>Workout name</label><input value="'+esc(w.name)+'" oninput="editingHist.name=this.value"></div>'+
+    body+
+    '<button class="btn" style="margin-top:6px" onclick="saveHistEdit()">Save changes</button></div>');
+}
+function histSet(i,j,k,v){editingHist.items[i].sets[j][k]=v;}
+function histFail(i,j){var s=editingHist.items[i].sets[j];s.fail=!s.fail;renderHistEditor();}
+function histRmSet(i,j){editingHist.items[i].sets.splice(j,1);renderHistEditor();}
+function histAddSet(i){var sets=editingHist.items[i].sets,last=sets[sets.length-1]||{};sets.push({weight:last.weight||0,reps:0,half:false,band:last.band||'',fail:false});renderHistEditor();}
+function histBand(i,j){
+  var cur=editingHist.items[i].sets[j].band||'';
+  var rows=BANDS.map(function(b){
+    return '<div class="bandrow" onclick="histPickBand('+i+','+j+',\''+b.key+'\')"><span class="bandsw" style="background:'+b.color+'"></span><div class="grow"><div class="t">'+b.name+(cur===b.key?' ✓':'')+'</div><div class="mg">'+b.lo+'–'+b.hi+'kg · logs '+b.kg+'kg</div></div></div>';
+  }).join('');
+  rows+='<div class="bandrow" onclick="histPickBand('+i+','+j+',\'\')"><span class="bandsw" style="background:#fff;border:2px solid var(--line)"></span><div class="grow"><div class="t">No band</div><div class="mg">Clear band · type weight by hand</div></div></div>';
+  openModal('<div class="sheet-head"><h3>Choose band</h3><button class="close" onclick="renderHistEditor()">✕</button></div><div class="sheet-body">'+rows+'</div>');
+}
+function histPickBand(i,j,key){
+  var s=editingHist.items[i].sets[j];
+  if(key){var b=bandByKey(key);s.band=key;s.weight=b?b.kg:0;}else{s.band='';}
+  renderHistEditor();
+}
+function saveHistEdit(){
+  var w=editingHist;
+  w.items.forEach(function(it){it.sets.forEach(function(s){s.weight=parseFloat(s.weight)||0;s.reps=parseInt(s.reps)||0;});});
+  w.items=w.items.filter(function(it){return it.sets.length;});
+  if(!w.name||!String(w.name).trim())w.name='Workout';
+  w.editedAt=Date.now();
+  var idx=DB.history.map(function(x){return x.id;}).indexOf(w.id);
+  if(idx>=0)DB.history[idx]=w;
+  editingHist=null;
+  save();closeModal();renderHistory();toast('Workout updated');
 }
 function repeatWorkout(id){
   var w=DB.history.filter(function(x){return x.id===id;})[0];if(!w)return;
@@ -1599,7 +1707,17 @@ function syncConfigured(){var s=DB.settings;return s.syncUrl&&s.syncKey&&s.syncC
 var autoSyncTimer=null;
 function maybeAutoSync(){if(!syncConfigured())return;clearTimeout(autoSyncTimer);autoSyncTimer=setTimeout(function(){syncNow(true);},2500);}
 function sbHeaders(){return {'apikey':DB.settings.syncKey,'Authorization':'Bearer '+DB.settings.syncKey,'Content-Type':'application/json'};}
-function mergeById(a,b,k){a=a||[];b=b||[];var seen={},out=a.slice();a.forEach(function(x){if(x&&x[k]!=null)seen[x[k]]=1;});b.forEach(function(x){if(x&&x[k]!=null&&!seen[x[k]]){out.push(x);seen[x[k]]=1;}});return out;}
+function mergeById(a,b,k){
+  a=a||[];b=b||[];var pos={},out=a.slice();
+  out.forEach(function(x,i){if(x&&x[k]!=null)pos[x[k]]=i;});
+  b.forEach(function(x){
+    if(!x||x[k]==null)return;
+    var i=pos[x[k]];
+    if(i==null){pos[x[k]]=out.length;out.push(x);}
+    else if((x.editedAt||0)>(out[i].editedAt||0))out[i]=x; /* edited copies win over stale ones */
+  });
+  return out;
+}
 function pruneExercises(){
   var ref={};
   DB.history.forEach(function(w){(w.items||[]).forEach(function(it){if(it.exId!=null)ref[it.exId]=1;});});
