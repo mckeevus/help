@@ -632,6 +632,10 @@ button{
 html,body{overscroll-behavior:none;}
 .fc .fc-complete{position:sticky;bottom:calc(env(safe-area-inset-bottom) + 10px);z-index:5;}
 
+/* ── Progressive overload banner ── */
+.fc-suggest{display:flex;align-items:center;gap:6px;justify-content:center;text-align:center;font-size:13px;font-weight:700;color:var(--green);background:var(--green-soft);border-radius:14px;padding:10px 12px;margin:10px 0 4px;}
+.fc-suggest b{font-weight:800;}
+
 /* ── Set navigation + editing ── */
 .fc-setnav{display:flex;align-items:center;justify-content:center;gap:14px;}
 .fc-setnav button{width:44px;height:44px;border-radius:50%;background:var(--bg);color:var(--muted);font-size:20px;font-weight:700;flex:none;display:flex;align-items:center;justify-content:center;}
@@ -752,6 +756,7 @@ function loadDB(){
   if(!d.blocks) d.blocks=[];
   if(!d.history) d.history=[];
   if(!d.body) d.body=[];
+  if(!d.suggest) d.suggest={};
   if(!d.settings) d.settings={};
   var s=d.settings; if(!s.units)s.units='kg'; if(!s.rest)s.rest=90;
   if(!s.syncUrl)s.syncUrl='https://aedzmfogyiusxnvezqgu.supabase.co'; if(!s.syncKey)s.syncKey='sb_publishable_1SIeZ5LgzTibvAf6Vmt3YA_KrCaSuyi'; if(s.syncCode===undefined)s.syncCode='';
@@ -965,8 +970,13 @@ function renderActive(){
     '<button class="pm" onclick="awStep('+ei+','+si+',\'reps\',1)">+</button></div>'+
     repChips(ei,si,prev,scheme)+'</div>';
   var fail='<div class="fc-fail'+(s.fail?' on':'')+'" onclick="awToggleFail('+ei+','+si+')"><div class="tx"><div class="t">Taken to failure</div><div class="s">Mark if this set was taken to failure</div></div><div class="sw"></div></div>';
+  var sg=(DB.suggest||{})[it.exId],sgHtml='';
+  if(sg){
+    if(sg.toBand){var sfb=bandByKey(sg.fromBand)||{},stb=bandByKey(sg.toBand)||{};sgHtml='<div class="fc-suggest">📈 Move up: '+esc(sfb.name||'?')+' → <b>'+esc(stb.name||'?')+' band</b> — you hit all target reps last time</div>';}
+    else sgHtml='<div class="fc-suggest">📈 Increase: '+sg.from+' → <b>'+sg.to+' '+u()+'</b> — you hit all target reps last time</div>';
+  }
   fc.innerHTML='<div class="fc"><div class="fc-head"><span class="fc-prog">'+prog+'</span><span class="fc-name">'+esc(ex?ex.name:'Exercise')+'</span><button class="fc-edit" onclick="awJump()">☰</button></div>'+
-    '<div class="fc-sub">'+subBits.join('  ·  ')+'</div>'+
+    '<div class="fc-sub">'+subBits.join('  ·  ')+'</div>'+sgHtml+
     '<div class="fc-setnav"><button onclick="awNav(-1)">‹</button><div class="fc-setlabel">Set '+(si+1)+' of '+it.sets.length+'</div><button onclick="awNav(1)">›</button></div>'+
     (editingDone?'<div class="fc-editing">Editing logged set</div>':'')+big+
     '<div class="fc-repspill"><span id="fc-repbig">'+rv+' reps</span></div>'+
@@ -1164,9 +1174,15 @@ function lastPerformed(exId){
   return null;
 }
 function prefillFromHistory(it){
-  var lp=lastPerformed(it.exId);if(!lp)return;
+  var sg=(DB.suggest||{})[it.exId];
+  var lp=lastPerformed(it.exId);
+  if(!sg&&!lp)return;
   it.sets.forEach(function(s,i){
     if(s.done||s.band||(s.weight!==''&&s.weight!=null))return;
+    if(sg){
+      if(sg.toBand)s.band=sg.toBand;else if(sg.to)s.weight=String(sg.to);
+      return;
+    }
     var p=lp[Math.min(i,lp.length-1)];if(!p)return;
     if(p.band)s.band=p.band;
     else if(p.weight)s.weight=String(p.weight);
@@ -1189,6 +1205,47 @@ var awTimerInt=null;
 function tickAw(){if(!DB.active)return;document.getElementById('aw-timer').textContent=fmtClock(Math.floor((Date.now()-DB.active.startedAt)/1000));}
 function cancelWorkout(){if(!confirm('Discard this workout? Nothing will be saved.'))return;stopRest();DB.active=null;save();releaseWake();tab('workout');}
 
+/* ───────── progressive overload ─────────
+   Hit the top of the target rep range on every set → next session prefills more
+   weight (or the next band up) and the card says why. Doing the exercise again
+   consumes the suggestion either way. */
+function repTop(t){
+  if(t==null)return null;t=String(t).trim();if(!t)return null;
+  var m=t.match(/^(\d+)\s*-\s*(\d+)$/);if(m)return parseInt(m[2]);
+  if(/^\d+$/.test(t))return parseInt(t);
+  return null;
+}
+function nextBandUp(key){var i=BANDS.map(function(b){return b.key;}).indexOf(key);return (i>=0&&i<BANDS.length-1)?BANDS[i+1]:null;}
+function computeSuggestions(){
+  if(!DB.suggest)DB.suggest={};
+  var made=[];
+  DB.active.items.forEach(function(it){
+    var ds=it.sets.filter(function(s){return s.done;});
+    if(!ds.length)return;
+    delete DB.suggest[it.exId];
+    if(it.gkind==='amrap')return;
+    var evald=0,allTop=true,maxW=0,band=null,mixed=false;
+    ds.forEach(function(s){
+      var top=repTop(s.tReps!=null&&s.tReps!==''?s.tReps:it.reps);
+      if(top==null)return;
+      evald++;
+      if((parseInt(s.reps)||0)<top)allTop=false;
+      if(s.band){if(band&&band!==s.band)mixed=true;if(maxW>0)mixed=true;band=s.band;}
+      else{var w=parseFloat(s.weight)||0;if(w>maxW)maxW=w;if(band)mixed=true;}
+    });
+    if(!evald||!allTop||mixed)return;
+    var sg=null;
+    if(band){
+      var nb=nextBandUp(band);if(!nb)return;
+      sg={fromBand:band,toBand:nb.key,date:Date.now()};
+    }else if(maxW>0){
+      sg={from:maxW,to:Math.round((maxW+2.5)*100)/100,date:Date.now()};
+    }
+    if(sg){DB.suggest[it.exId]=sg;made.push(Object.assign({exId:it.exId},sg));}
+  });
+  return made;
+}
+
 function finishWorkout(){
   if(!DB.active)return;
   var done=[];
@@ -1198,10 +1255,11 @@ function finishWorkout(){
   });
   if(!done.length){if(!confirm('No completed sets. Finish anyway (won\'t be saved)?'))return;stopRest();DB.active=null;save();releaseWake();tab('workout');return;}
   var prs=detectPRs(done);
+  var suggs=computeSuggestions();
   var w={id:uid(),name:DB.active.name,date:Date.now(),duration:Math.floor((Date.now()-DB.active.startedAt)/1000),items:done,prs:prs};
   stopRest();DB.history.unshift(w);DB.active=null;save();releaseWake();
   if(DB.settings.strava&&DB.settings.stravaAuto)postToStrava(w);
-  if(prs.length)showPRModal(w,prs);else{toast('Workout saved 💪');tab('history');}
+  if(prs.length||suggs.length)showPRModal(w,prs,suggs);else{toast('Workout saved 💪');tab('history');}
 }
 function priorBests(exId){
   var mw=0,me=0,msv=0,seen=false;
@@ -1221,13 +1279,25 @@ function detectPRs(done){
   return prs;
 }
 function prLabel(t){return t==='weight'?'Heaviest weight':t==='e1rm'?'Best est. 1RM':'Best set volume';}
-function showPRModal(w,prs){
+function showPRModal(w,prs,suggs){
+  prs=prs||[];suggs=suggs||[];
   var rows=prs.map(function(p){var e=exById(p.exId);
     return '<div class="pr-row"><span class="em">🏆</span><div class="grow"><div class="t">'+esc(e?e.name:'?')+'</div>'+
       '<div class="s">'+prLabel(p.type)+': '+p.value+' '+(p.type==='e1rm'||p.type==='weight'?u():u())+(p.prev?'  (was '+Math.round(p.prev)+')':'')+'</div></div></div>';
   }).join('');
-  openModal('<div class="sheet-head"><h3>New Personal Bests! 🎉</h3><button class="close" onclick="closeModal();tab(\'history\')">✕</button></div>'+
-    '<div class="sheet-body">'+rows+'<button class="btn" style="margin-top:8px" onclick="closeModal();tab(\'history\')">Done</button></div>');
+  var srows=suggs.map(function(g){
+    var e=exById(g.exId);
+    var what,why;
+    if(g.toBand){var tb=bandByKey(g.toBand)||{},fb=bandByKey(g.fromBand)||{};what='Move up to the '+tb.name+' band';why='all target reps on the '+fb.name;}
+    else{what='Increase to '+g.to+' '+u();why='all target reps at '+g.from+' '+u();}
+    return '<div class="pr-row" style="background:var(--green-soft);border-color:#bfe6cc"><span class="em">📈</span><div class="grow"><div class="t">'+esc(e?e.name:'?')+'</div>'+
+      '<div class="s" style="color:var(--green)">'+what+' next time — you hit '+why+'</div></div></div>';
+  }).join('');
+  var title=prs.length?'New Personal Bests! 🎉':'Time to go heavier 📈';
+  openModal('<div class="sheet-head"><h3>'+title+'</h3><button class="close" onclick="closeModal();tab(\'history\')">✕</button></div>'+
+    '<div class="sheet-body">'+rows+
+    (srows?'<div class="sec-label" style="margin-top:'+(rows?'14px':'0')+'">Progression — preloaded for next time</div>'+srows:'')+
+    '<button class="btn" style="margin-top:8px" onclick="closeModal();tab(\'history\')">Done</button></div>');
 }
 
 /* ───────── rest — timestamp-based so it survives screen lock and reload ───────── */
@@ -1818,13 +1888,17 @@ function syncNow(silent){
     DB.routines=mergeById(DB.routines,d.routines,'id');DB.routines.forEach(migrateRoutine);
     DB.blocks=mergeById(DB.blocks,d.blocks,'id');
     DB.exercises=mergeById(DB.exercises,d.exercises,'id');
+    var rs=d.suggest||{},ls=DB.suggest||{},ms={};
+    Object.keys(rs).forEach(function(k){ms[k]=rs[k];});
+    Object.keys(ls).forEach(function(k){if(!ms[k]||(ls[k].date||0)>=(ms[k].date||0))ms[k]=ls[k];});
+    DB.suggest=ms;
     pruneExercises();
     DB.updatedAt=Date.now();saveQuiet();
     pushSync(silent);refreshAll();
   }).catch(function(e){if(!silent)toast('Sync failed — check connection');});
 }
 function pushSync(silent){
-  var payload={code:DB.settings.syncCode,data:{exercises:DB.exercises,routines:DB.routines,blocks:DB.blocks,history:DB.history,body:DB.body,settings:DB.settings},updated_at:DB.updatedAt||Date.now()};
+  var payload={code:DB.settings.syncCode,data:{exercises:DB.exercises,routines:DB.routines,blocks:DB.blocks,history:DB.history,body:DB.body,suggest:DB.suggest||{},settings:DB.settings},updated_at:DB.updatedAt||Date.now()};
   fetch(DB.settings.syncUrl+'/rest/v1/lift_sync',{method:'POST',headers:Object.assign(sbHeaders(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(payload)})
     .then(function(r){if(!r.ok)throw 0;DB.settings.lastSync=Date.now();saveQuiet();if(!silent)toast('Synced ✓ '+DB.history.length+' workouts');})
     .catch(function(e){if(!silent)toast('Sync push failed');});
